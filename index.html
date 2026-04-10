@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finanzas · Julieta Bolullo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1c1a;
+      --bg2:       #252320;
+      --bg3:       #2d2b28;
+      --accent:    #E8521A;
+      --accent-d:  rgba(232,82,26,.15);
+      --sand:      #C8BFB0;
+      --sand-d:    rgba(200,191,176,.12);
+      --green:     #6fcf97;
+      --red:       #eb5757;
+      --yellow:    #f1c40f;
+      --text:      #e8e4de;
+      --muted:     #8a857e;
+      --border:    rgba(200,191,176,.12);
+      --r:         12px;
+      --rs:        8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Roboto', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ─────────────────────────────────────── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 1.1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--sand);
+      letter-spacing: .04em;
+    }
+    .logo span { color: var(--accent); }
+
+    .tabs { display: flex; gap: .2rem; }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: .75rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: .45rem .9rem;
+      cursor: pointer;
+      border-radius: var(--rs);
+      transition: all .2s;
+    }
+    .tab-btn:hover  { color: var(--sand); background: var(--sand-d); }
+    .tab-btn.active { color: var(--accent); background: var(--accent-d); }
+
+    /* ── LAYOUT ─────────────────────────────────────── */
+    main { padding: 2rem; max-width: 1240px; margin: 0 auto; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 900px) {
+      .three-col { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 680px) {
+      main { padding: 1rem; }
+      header { padding: .9rem 1rem; }
+      .two-col, .three-col { grid-template-columns: 1fr; }
+    }
+
+    /* ── KPI CARDS ──────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 1.4rem 1.5rem;
+    }
+    .kpi-label {
+      font-family: 'DM Mono', monospace;
+      font-size: .68rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .5rem;
+    }
+    .kpi-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.85rem;
+      font-weight: 500;
+    }
+    .kpi-value.pos    { color: var(--green); }
+    .kpi-value.neg    { color: var(--red); }
+    .kpi-value.acc    { color: var(--accent); }
+    .kpi-value.warn   { color: var(--yellow); }
+
+    /* ── MONTH NAV ──────────────────────────────────── */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.75rem;
+    }
+    .month-nav button {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--sand);
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+    .month-nav button:hover { border-color: var(--accent); color: var(--accent); }
+    .month-display {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--sand);
+    }
+
+    /* ── CARD ───────────────────────────────────────── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 1.5rem;
+    }
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: .95rem;
+      font-weight: 600;
+      color: var(--sand);
+      margin-bottom: 1.1rem;
+      padding-bottom: .7rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── FORMS ──────────────────────────────────────── */
+    .form-group { margin-bottom: .9rem; }
+    label {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: .67rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .35rem;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--rs);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: .84rem;
+      padding: .55rem .8rem;
+      transition: border-color .2s;
+      outline: none;
+      appearance: auto;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    select option { background: var(--bg3); }
+    textarea { resize: vertical; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+
+    /* ── BUTTONS ────────────────────────────────────── */
+    .btn {
+      padding: .58rem 1.15rem;
+      border-radius: var(--rs);
+      border: none;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: .76rem;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      transition: all .18s;
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; font-weight: 500; }
+    .btn-primary:hover { background: #d14918; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--sand); }
+    .btn-ghost:hover { border-color: var(--sand); }
+    .btn-sm { padding: .32rem .7rem; font-size: .69rem; }
+    .btn-full { width: 100%; justify-content: center; }
+    .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
+    .btn-danger:hover { background: rgba(235,87,87,.12); }
+
+    /* ── TYPE TOGGLE ────────────────────────────────── */
+    .type-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .2rem;
+      background: var(--bg3);
+      border-radius: var(--rs);
+      padding: .2rem;
+      margin-bottom: 1rem;
+    }
+    .type-btn {
+      padding: .48rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: .72rem;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      background: transparent;
+      color: var(--muted);
+      transition: all .2s;
+    }
+    .type-btn.active.ingreso { background: rgba(111,207,151,.18); color: var(--green); }
+    .type-btn.active.gasto   { background: rgba(235,87,87,.18);   color: var(--red); }
+
+    /* ── MOVEMENT LIST ──────────────────────────────── */
+    .mov-list { list-style: none; }
+    .mov-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: .7rem 0;
+      border-bottom: 1px solid var(--border);
+      gap: .5rem;
+    }
+    .mov-item:last-child { border-bottom: none; }
+    .mov-desc { font-size: .86rem; color: var(--text); margin-bottom: .18rem; }
+    .mov-meta {
+      font-family: 'DM Mono', monospace;
+      font-size: .68rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .mov-amt {
+      font-family: 'DM Mono', monospace;
+      font-size: .95rem;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .mov-amt.ingreso { color: var(--green); }
+    .mov-amt.gasto   { color: var(--red); }
+
+    /* ── BARS ───────────────────────────────────────── */
+    .bar-item { margin-bottom: .85rem; }
+    .bar-header { display: flex; justify-content: space-between; margin-bottom: .3rem; }
+    .bar-label { font-size: .8rem; color: var(--sand); }
+    .bar-amt   { font-family: 'DM Mono', monospace; font-size: .76rem; color: var(--muted); }
+    .bar-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 2px; transition: width .6s ease; }
+    .bar-fill.ingreso { background: var(--green); }
+    .bar-fill.empresa { background: var(--accent); }
+    .bar-fill.personal { background: var(--sand); }
+
+    /* ── CATEGORIES ─────────────────────────────────── */
+    .cat-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .85rem; min-height: 1.5rem; }
+    .cat-tag {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: .2rem .65rem;
+      font-family: 'DM Mono', monospace;
+      font-size: .67rem;
+      color: var(--muted);
+    }
+    .cat-tag.empresa { border-color: rgba(232,82,26,.3); color: var(--accent); }
+    .cat-tag.personal { border-color: rgba(200,191,176,.25); color: var(--sand); }
+
+    /* ── INVOICE LIST ───────────────────────────────── */
+    .inv-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .95rem 1.1rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--rs);
+      margin-bottom: .65rem;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      gap: .5rem;
+    }
+    .inv-item:hover { border-color: var(--accent); background: rgba(232,82,26,.04); }
+    .inv-num  { font-family: 'DM Mono', monospace; font-size: .7rem; color: var(--muted); margin-bottom: .18rem; }
+    .inv-cli  { font-size: .92rem; color: var(--text); }
+    .inv-date { font-family: 'DM Mono', monospace; font-size: .68rem; color: var(--muted); margin-top: .18rem; }
+    .inv-right { text-align: right; flex-shrink: 0; }
+    .inv-total { font-family: 'DM Mono', monospace; font-size: 1.05rem; font-weight: 500; margin-bottom: .3rem; }
+
+    /* ── STATUS BADGE ───────────────────────────────── */
+    .badge {
+      font-family: 'DM Mono', monospace;
+      font-size: .62rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: .18rem .55rem;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    .badge-pendiente  { background: rgba(241,196,15,.12);  color: var(--yellow); }
+    .badge-pagada     { background: rgba(111,207,151,.12); color: var(--green); }
+    .badge-cancelada  { background: rgba(235,87,87,.12);   color: var(--red); }
+
+    /* ── MODAL ──────────────────────────────────────── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 1rem;
+      backdrop-filter: blur(5px);
+    }
+    .overlay.hidden { display: none; }
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      width: 100%;
+      max-width: 640px;
+      max-height: 92vh;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+    .modal.wide { max-width: 780px; }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .modal-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--sand); }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.6rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 .2rem;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    /* ── CONCEPT ROWS ───────────────────────────────── */
+    .concept-row {
+      display: grid;
+      grid-template-columns: 1fr 70px 100px 32px;
+      gap: .45rem;
+      align-items: end;
+      margin-bottom: .45rem;
+    }
+    .concept-row input { width: 100%; }
+    .btn-rm {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 32px; height: 36px;
+      border-radius: var(--rs);
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-rm:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── TOTALS BOX ─────────────────────────────────── */
+    .totals-box {
+      background: var(--bg3);
+      border-radius: var(--rs);
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'DM Mono', monospace;
+      font-size: .8rem;
+      margin-bottom: .4rem;
+    }
+    .totals-row .t-label { color: var(--muted); }
+    .totals-row.final {
+      border-top: 1px solid var(--border);
+      padding-top: .5rem;
+      margin-top: .25rem;
+      font-size: .92rem;
+    }
+    .totals-row.final .t-label { color: var(--sand); }
+    .totals-row.final .t-value { color: var(--accent); font-weight: 500; }
+
+    /* ── INVOICE PAPER ──────────────────────────────── */
+    .inv-paper {
+      background: #fff;
+      color: #1a1a1a;
+      padding: 2.5rem;
+      border-radius: var(--rs);
+      font-family: 'Roboto', sans-serif;
+    }
+    .inv-paper-head {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 2.5px solid #E8521A;
+    }
+    .inv-paper-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    .inv-paper-logo span { color: #E8521A; }
+    .inv-paper-logo-sub { font-size: .75rem; color: #666; margin-top: .3rem; line-height: 1.5; }
+    .inv-paper-num  { font-family: 'DM Mono', monospace; font-size: 1.4rem; color: #E8521A; font-weight: 500; }
+    .inv-paper-meta { font-size: .78rem; color: #666; text-align: right; margin-top: .3rem; }
+    .inv-parties {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 1.75rem;
+    }
+    .party-label {
+      font-family: 'DM Mono', monospace;
+      font-size: .62rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #E8521A;
+      margin-bottom: .4rem;
+    }
+    .party-name   { font-weight: 500; font-size: .9rem; margin-bottom: .2rem; }
+    .party-detail { font-size: .77rem; color: #555; line-height: 1.55; }
+    .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 1.25rem; font-size: .83rem; }
+    .inv-table th {
+      background: #f5f2ee;
+      padding: .55rem .7rem;
+      text-align: left;
+      font-family: 'DM Mono', monospace;
+      font-size: .62rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: #666;
+      font-weight: 400;
+    }
+    .inv-table td { padding: .7rem; border-bottom: 1px solid #eee; color: #333; }
+    .inv-table .tr { text-align: right; }
+    .inv-totals { display: flex; flex-direction: column; align-items: flex-end; gap: .35rem; margin-bottom: 1.5rem; }
+    .inv-tot-row { display: flex; gap: 2rem; font-size: .82rem; font-family: 'DM Mono', monospace; }
+    .inv-tot-row .tl { color: #666; width: 130px; text-align: right; font-size: .74rem; }
+    .inv-tot-row .tv { width: 100px; text-align: right; }
+    .inv-tot-row.tf { border-top: 2px solid #1a1a1a; padding-top: .45rem; margin-top: .15rem; }
+    .inv-tot-row.tf .tl,
+    .inv-tot-row.tf .tv { font-weight: 700; font-size: .95rem; color: #1a1a1a; }
+    .inv-notes {
+      background: #f5f2ee;
+      padding: .9rem 1rem;
+      border-radius: 6px;
+      font-size: .77rem;
+      color: #555;
+      line-height: 1.65;
+    }
+
+    /* ── STATUS BTNS IN PREVIEW ─────────────────────── */
+    .status-actions { display: flex; gap: .5rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .status-actions span { font-family: 'DM Mono', monospace; font-size: .72rem; color: var(--muted); }
+
+    /* ── MISC ───────────────────────────────────────── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.15rem 0; }
+    .scroll { max-height: 420px; overflow-y: auto; }
+    .loading { text-align: center; color: var(--muted); font-family: 'DM Mono', monospace; font-size: .78rem; padding: 2rem; }
+    .empty   { text-align: center; color: var(--muted); font-size: .85rem; padding: 2.5rem 1rem; }
+    .sect-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .sect-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--sand); }
+
+    /* ── TOAST ──────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--bg3);
+      border: 1px solid var(--accent);
+      border-radius: var(--rs);
+      padding: .8rem 1.1rem;
+      font-family: 'DM Mono', monospace;
+      font-size: .78rem;
+      color: var(--text);
+      z-index: 9999;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all .3s;
+      max-width: 320px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── PRINT ──────────────────────────────────────── */
+    @media print {
+      body * { visibility: hidden !important; }
+      .inv-paper, .inv-paper * { visibility: visible !important; }
+      .inv-paper { position: fixed; top: 0; left: 0; right: 0; padding: 1.5cm; background: #fff !important; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Julieta <span>Bolullo</span></div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="facturas">Facturas</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ═══════════════ DASHBOARD ═══════════════ -->
+  <section class="tab-pane active" id="tab-dashboard">
+
+    <div class="month-nav">
+      <button id="prevMonth">&#8592;</button>
+      <div class="month-display" id="monthDisplay"></div>
+      <button id="nextMonth">&#8594;</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Ingresos del mes</div>
+        <div class="kpi-value pos" id="kpiIng">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Gastos del mes</div>
+        <div class="kpi-value neg" id="kpiGas">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Balance</div>
+        <div class="kpi-value" id="kpiBal">—</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+
+      <!-- FORM -->
+      <div class="card">
+        <div class="card-title">Nuevo movimiento</div>
+        <div class="type-toggle">
+          <button class="type-btn active ingreso" data-type="ingreso">+ Ingreso</button>
+          <button class="type-btn gasto" data-type="gasto">− Gasto</button>
+        </div>
+        <form id="movForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Fecha</label>
+              <input type="date" id="movFecha" required>
+            </div>
+            <div class="form-group">
+              <label>Importe (€)</label>
+              <input type="number" id="movImporte" step="0.01" min="0" placeholder="0.00" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <input type="text" id="movDesc" placeholder="Descripción del movimiento" required>
+          </div>
+
+          <!-- Ingreso -->
+          <div id="ingresoFields">
+            <div class="form-group">
+              <label>Cliente</label>
+              <select id="movCliente"><option value="">Sin cliente</option></select>
+            </div>
+          </div>
+
+          <!-- Gasto -->
+          <div id="gastoFields" style="display:none">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Bloque</label>
+                <select id="movBloque">
+                  <option value="empresa">Empresa</option>
+                  <option value="personal">Personal</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Categoría</label>
+                <select id="movCategoria"><option value="">Sin categoría</option></select>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full" style="margin-top:.3rem">Guardar movimiento</button>
+        </form>
+
+        <hr class="divider">
+
+        <div class="card-title" style="font-size:.85rem;margin-bottom:.75rem">Categorías</div>
+        <div class="cat-tags" id="catTags"></div>
+        <div style="display:flex;gap:.45rem">
+          <input type="text" id="newCatName" placeholder="Nueva categoría...">
+          <select id="newCatBloque" style="width:auto;min-width:90px">
+            <option value="empresa">Empresa</option>
+            <option value="personal">Personal</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="addCatBtn">+</button>
+        </div>
+      </div>
+
+      <!-- MOVEMENTS LIST -->
+      <div class="card">
+        <div class="card-title">Movimientos del mes</div>
+        <div class="scroll">
+          <ul class="mov-list" id="movList"><li class="loading">Cargando...</li></ul>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- BREAKDOWN BARS -->
+    <div class="three-col">
+      <div class="card">
+        <div class="card-title">Ingresos por cliente</div>
+        <div id="barIng"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gastos empresa</div>
+        <div id="barEmp"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gastos personal</div>
+        <div id="barPer"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ═══════════════ FACTURAS ═══════════════ -->
+  <section class="tab-pane" id="tab-facturas">
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total facturado</div>
+        <div class="kpi-value acc" id="fKpiTotal">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Cobrado</div>
+        <div class="kpi-value pos" id="fKpiCobrado">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pendiente</div>
+        <div class="kpi-value warn" id="fKpiPend">—</div>
+      </div>
+    </div>
+
+    <div class="sect-head">
+      <div class="sect-title">Facturas</div>
+      <button class="btn btn-primary" id="btnNuevaFactura">+ Nueva factura</button>
+    </div>
+
+    <div id="factList"><div class="loading">Cargando facturas...</div></div>
+
+  </section>
+
+</main>
+
+<!-- ═══════════════ MODAL: NUEVA FACTURA ═══════════════ -->
+<div class="overlay hidden" id="overlayFactura">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Nueva factura</div>
+      <button class="modal-close" data-close="overlayFactura">&times;</button>
+    </div>
+
+    <form id="factForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Número</label>
+          <input type="text" id="fNum" readonly>
+        </div>
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="fFecha" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="fClienteSel">
+          <option value="avon">AVON COSMETICS S.A.U.</option>
+          <option value="agora">Agora News (Xperia)</option>
+          <option value="otro">Otro...</option>
+        </select>
+      </div>
+
+      <div id="clienteManual" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre / Razón social</label>
+            <input type="text" id="fCliNom" placeholder="Nombre del cliente">
+          </div>
+          <div class="form-group">
+            <label>NIF / CIF</label>
+            <input type="text" id="fCliNif" placeholder="B12345678">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Dirección</label>
+          <input type="text" id="fCliDir" placeholder="Dirección completa">
+        </div>
+      </div>
+
+      <hr class="divider">
+      <div style="font-family:'Playfair Display',serif;font-size:.9rem;color:var(--sand);margin-bottom:.7rem">Conceptos</div>
+
+      <div id="conceptosCont"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnAddConcepto" style="margin-bottom:1rem">+ Añadir línea</button>
+
+      <hr class="divider">
+
+      <div class="totals-box">
+        <div class="totals-row"><span class="t-label">Base imponible</span><span id="pBase">0,00 €</span></div>
+        <div class="totals-row"><span class="t-label">IGIC (7%)</span><span id="pIgic">0,00 €</span></div>
+        <div class="totals-row"><span class="t-label" style="color:var(--red)">IRPF (−15%)</span><span id="pIrpf" style="color:var(--red)">0,00 €</span></div>
+        <div class="totals-row final"><span class="t-label">TOTAL A PERCIBIR</span><span class="t-value" id="pTotal">0,00 €</span></div>
+      </div>
+
+      <div class="form-group">
+        <label>Notas</label>
+        <textarea id="fNotas" rows="3"></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full">Crear factura</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL: PREVIEW FACTURA ═══════════════ -->
+<div class="overlay hidden" id="overlayPreview">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div class="modal-title">Vista previa</div>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="btnPrint">Imprimir / PDF</button>
+        <button class="modal-close" data-close="overlayPreview">&times;</button>
+      </div>
+    </div>
+
+    <div class="status-actions">
+      <span>Estado:</span>
+      <button class="btn btn-sm btn-ghost" id="sBtnPendiente" data-s="pendiente">Pendiente</button>
+      <button class="btn btn-sm btn-ghost" id="sBtnPagada"    data-s="pagada">Pagada</button>
+      <button class="btn btn-sm btn-ghost" id="sBtnCancelada" data-s="cancelada">Cancelada</button>
+    </div>
+
+    <div class="inv-paper" id="invPaper"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════════════ */
+const SUPA_URL = 'https://hutvzpriavhdyrogqafa.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1dHZ6cHJpYXZoZHlyb2dxYWZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NTcyODksImV4cCI6MjA5MTMzMzI4OX0.i7D24N1rW0mHyuEguEBl_PJE2sqgtjSkq7oAmutUygY';
+const db = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const ME = {
+  nombre:    'JULIETA BOLULLO',
+  dni:       '47762986J',
+  direccion: 'Carretera General TF 657 nº 41',
+  ciudad:    'Buzanada, 38627 · Santa Cruz de Tenerife',
+  telefono:  '+34 633 557 895',
+  web:       'www.julietabolullo.com · laagenciadeia.com',
+  iban:      'ES12 0182 4016 0202 0801 1218 (BBVA)',
+};
+
+const CLI_PREDEFINED = {
+  avon:  { nombre: 'AVON COSMETICS S.A.U.',   nif: 'A28151298',  dir: 'C/ Laura Grote de la Puerta nº16, Ed. Alex, P.I. El Mayorazgo, 38108 Santa Cruz de Tenerife' },
+  agora: { nombre: 'Agora News (Xperia)',      nif: '',           dir: '' },
+  otro:  { nombre: '',                         nif: '',           dir: '' },
+};
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+/* ════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════ */
+let curMonth = new Date().getMonth();
+let curYear  = new Date().getFullYear();
+let movTipo  = 'ingreso';
+let cats     = [];
+let clis     = [];
+let conceptN = 0;
+let previewId = null;
+
+/* ════════════════════════════════════════════════════
+   UTILS
+════════════════════════════════════════════════════ */
+const fmt    = n => new Intl.NumberFormat('es-ES', { style:'currency', currency:'EUR' }).format(n || 0);
+const fmtD   = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-ES') : '';
+const $ = id => document.getElementById(id);
+
+function monthRange(y, m) {
+  const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  const last = new Date(y, m+1, 0).getDate();
+  const to   = `${y}-${String(m+1).padStart(2,'0')}-${last}`;
+  return { from, to };
+}
+
+function toast(msg, err = false) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.style.borderColor = err ? 'var(--red)' : 'var(--accent)';
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+function openM(id)  { $(id).classList.remove('hidden'); }
+function closeM(id) { $(id).classList.add('hidden'); }
+
+/* ════════════════════════════════════════════════════
+   TABS
+════════════════════════════════════════════════════ */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'facturas') loadFacturas();
+  });
+});
+
+document.querySelectorAll('[data-close]').forEach(btn =>
+  btn.addEventListener('click', () => closeM(btn.dataset.close))
+);
+document.querySelectorAll('.overlay').forEach(ov =>
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.add('hidden'); })
+);
+
+/* ════════════════════════════════════════════════════
+   CATEGORIES
+════════════════════════════════════════════════════ */
+async function loadCats() {
+  const { data } = await db.from('categorias').select('*').order('bloque').order('nombre');
+  cats = data || [];
+  renderCatTags();
+  filterCatSelect();
+}
+
+function renderCatTags() {
+  $('catTags').innerHTML = cats.map(c =>
+    `<span class="cat-tag ${c.bloque}" title="${c.bloque}">${c.nombre}</span>`
+  ).join('') || '<span style="color:var(--muted);font-size:.75rem;font-family:\'DM Mono\',monospace">Sin categorías aún</span>';
+}
+
+function filterCatSelect() {
+  const bloque = $('movBloque').value;
+  const filtered = cats.filter(c => c.bloque === bloque);
+  $('movCategoria').innerHTML = '<option value="">Sin categoría</option>' +
+    filtered.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+$('movBloque').addEventListener('change', filterCatSelect);
+
+$('addCatBtn').addEventListener('click', async () => {
+  const nombre = $('newCatName').value.trim();
+  const bloque = $('newCatBloque').value;
+  if (!nombre) { toast('Escribe un nombre', true); return; }
+  const { error } = await db.from('categorias').insert({ nombre, bloque });
+  if (error) { toast('Error: ' + error.message, true); return; }
+  $('newCatName').value = '';
+  await loadCats();
+  toast('Categoría "' + nombre + '" añadida');
+});
+
+/* ════════════════════════════════════════════════════
+   CLIENTS
+════════════════════════════════════════════════════ */
+async function loadClis() {
+  const { data } = await db.from('clientes').select('*').order('nombre');
+  clis = data || [];
+  $('movCliente').innerHTML = '<option value="">Sin cliente</option>' +
+    clis.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   TYPE TOGGLE
+════════════════════════════════════════════════════ */
+document.querySelectorAll('.type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    movTipo = btn.dataset.type;
+    $('ingresoFields').style.display = movTipo === 'ingreso' ? '' : 'none';
+    $('gastoFields').style.display   = movTipo === 'gasto'   ? '' : 'none';
+  });
+});
+
+/* ════════════════════════════════════════════════════
+   MONTH NAV
+════════════════════════════════════════════════════ */
+function updateMonthDisplay() {
+  $('monthDisplay').textContent = `${MESES[curMonth]} ${curYear}`;
+}
+
+$('prevMonth').addEventListener('click', () => {
+  if (curMonth === 0) { curMonth = 11; curYear--; } else curMonth--;
+  updateMonthDisplay(); loadDashboard();
+});
+$('nextMonth').addEventListener('click', () => {
+  if (curMonth === 11) { curMonth = 0; curYear++; } else curMonth++;
+  updateMonthDisplay(); loadDashboard();
+});
+
+/* ════════════════════════════════════════════════════
+   DASHBOARD
+════════════════════════════════════════════════════ */
+async function loadDashboard() {
+  const { from, to } = monthRange(curYear, curMonth);
+
+  const { data: movs, error } = await db
+    .from('movimientos')
+    .select('*, clientes(nombre), categorias(nombre,bloque)')
+    .gte('fecha', from)
+    .lte('fecha', to)
+    .order('fecha', { ascending: false });
+
+  if (error) { toast('Error cargando movimientos', true); return; }
+
+  const ingresos = movs.filter(m => m.tipo === 'ingreso');
+  const gastos   = movs.filter(m => m.tipo === 'gasto');
+
+  const totIng = ingresos.reduce((s, m) => s + (m.importe || 0), 0);
+  const totGas = gastos.reduce((s, m) => s + (m.importe || 0), 0);
+  const bal    = totIng - totGas;
+
+  $('kpiIng').textContent = fmt(totIng);
+  $('kpiGas').textContent = fmt(totGas);
+  const balEl = $('kpiBal');
+  balEl.textContent = fmt(bal);
+  balEl.className = 'kpi-value ' + (bal >= 0 ? 'pos' : 'neg');
+
+  renderMovList(movs);
+  renderBreakdowns(ingresos, gastos);
+}
+
+function renderMovList(movs) {
+  const ul = $('movList');
+  if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
+  ul.innerHTML = movs.map(m => `
+    <li class="mov-item">
+      <div>
+        <div class="mov-desc">${m.descripcion || '—'}</div>
+        <div class="mov-meta">
+          ${fmtD(m.fecha)}${m.clientes ? ' · ' + m.clientes.nombre : ''}${m.categorias ? ' · ' + m.categorias.nombre : ''}${m.bloque ? ' · ' + m.bloque : ''}
+        </div>
+      </div>
+      <div class="mov-amt ${m.tipo}">${m.tipo === 'gasto' ? '−' : '+'}${fmt(m.importe)}</div>
+    </li>
+  `).join('');
+}
+
+function renderBreakdowns(ingresos, gastos) {
+  const byClient  = groupBy(ingresos, m => m.clientes?.nombre || 'Sin cliente');
+  const byEmpresa = groupBy(gastos.filter(m => m.bloque === 'empresa'), m => m.categorias?.nombre || 'Sin categoría');
+  const byPersonal= groupBy(gastos.filter(m => m.bloque === 'personal'), m => m.categorias?.nombre || 'Sin categoría');
+
+  renderBars('barIng', byClient, 'ingreso');
+  renderBars('barEmp', byEmpresa, 'empresa');
+  renderBars('barPer', byPersonal, 'personal');
+}
+
+function groupBy(arr, keyFn) {
+  return arr.reduce((acc, m) => {
+    const k = keyFn(m);
+    acc[k] = (acc[k] || 0) + (m.importe || 0);
+    return acc;
+  }, {});
+}
+
+function renderBars(id, data, type) {
+  const el = $(id);
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) { el.innerHTML = '<div class="empty" style="padding:.75rem">Sin datos</div>'; return; }
+  const max = entries[0][1];
+  el.innerHTML = entries.map(([label, amt]) => `
+    <div class="bar-item">
+      <div class="bar-header">
+        <span class="bar-label">${label}</span>
+        <span class="bar-amt">${fmt(amt)}</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill ${type}" style="width:${(amt/max*100).toFixed(1)}%"></div></div>
+    </div>
+  `).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   ADD MOVEMENT
+════════════════════════════════════════════════════ */
+$('movFecha').valueAsDate = new Date();
+
+$('movForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const mov = {
+    tipo:        movTipo,
+    fecha:       $('movFecha').value,
+    importe:     parseFloat($('movImporte').value),
+    descripcion: $('movDesc').value.trim(),
+  };
+  if (movTipo === 'ingreso') {
+    mov.bloque = 'empresa';
+    const cId = $('movCliente').value;
+    if (cId) mov.cliente_id = cId;
+  } else {
+    mov.bloque = $('movBloque').value;
+    const catId = $('movCategoria').value;
+    if (catId) mov.categoria_id = catId;
+  }
+  const { error } = await db.from('movimientos').insert(mov);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  $('movImporte').value = '';
+  $('movDesc').value = '';
+  toast('Movimiento guardado ✓');
+  loadDashboard();
+});
+
+/* ════════════════════════════════════════════════════
+   FACTURAS — LIST
+════════════════════════════════════════════════════ */
+async function loadFacturas() {
+  const { data, error } = await db.from('facturas').select('*').order('created_at', { ascending: false });
+  if (error) { toast('Error cargando facturas', true); return; }
+
+  const total   = data.reduce((s, f) => s + (f.total || 0), 0);
+  const cobrado = data.filter(f => f.estado === 'pagada').reduce((s, f) => s + (f.total || 0), 0);
+  const pend    = data.filter(f => f.estado === 'pendiente').reduce((s, f) => s + (f.total || 0), 0);
+
+  $('fKpiTotal').textContent  = fmt(total);
+  $('fKpiCobrado').textContent = fmt(cobrado);
+  $('fKpiPend').textContent   = fmt(pend);
+
+  const container = $('factList');
+  if (!data.length) { container.innerHTML = '<div class="empty">Sin facturas todavía</div>'; return; }
+
+  container.innerHTML = data.map(f => `
+    <div class="inv-item" data-id="${f.id}">
+      <div>
+        <div class="inv-num">${f.numero}</div>
+        <div class="inv-cli">${f.cliente_nombre}</div>
+        <div class="inv-date">${fmtD(f.fecha)}</div>
+      </div>
+      <div class="inv-right">
+        <div class="inv-total">${fmt(f.total)}</div>
+        <span class="badge badge-${f.estado}">${f.estado}</span>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.inv-item').forEach(item =>
+    item.addEventListener('click', () => showPreview(item.dataset.id))
+  );
+}
+
+/* ════════════════════════════════════════════════════
+   NUEVA FACTURA
+════════════════════════════════════════════════════ */
+async function nextInvoiceNum() {
+  const { data } = await db.from('facturas').select('numero').order('created_at', { ascending: false }).limit(1);
+  const today = new Date();
+  const y = today.getFullYear();
+  const MIN = 48;
+
+  if (!data || !data.length) return `FAC-${y}-${String(MIN).padStart(3,'0')}`;
+
+  const match = (data[0].numero || '').match(/FAC-(\d+)-(\d+)/);
+  if (!match) return `FAC-${y}-${String(MIN).padStart(3,'0')}`;
+
+  const ly = parseInt(match[1]);
+  const ln = parseInt(match[2]);
+
+  if (y > ly) return `FAC-${y}-001`;
+  return `FAC-${y}-${String(ln + 1).padStart(3,'0')}`;
+}
+
+$('btnNuevaFactura').addEventListener('click', async () => {
+  $('fNum').value   = await nextInvoiceNum();
+  $('fFecha').valueAsDate = new Date();
+  $('fNotas').value = `Datos de pago:\nIBAN: ${ME.iban}\n\nEl pago deberá realizarse en un plazo de 30 días desde la fecha de emisión de la factura.\n\nGracias por su confianza.`;
+  $('conceptosCont').innerHTML = '';
+  conceptN = 0;
+  addConceptoRow();
+  calcTotals();
+  $('fClienteSel').value = 'avon';
+  handleClienteSel();
+  openM('overlayFactura');
+});
+
+$('fClienteSel').addEventListener('change', handleClienteSel);
+
+function handleClienteSel() {
+  const val = $('fClienteSel').value;
+  const show = val === 'agora' || val === 'otro';
+  $('clienteManual').style.display = show ? '' : 'none';
+  if (val === 'agora') {
+    $('fCliNom').value = 'Agora News (Xperia)';
+    $('fCliNif').value = '';
+    $('fCliDir').value = '';
+  } else if (val === 'otro') {
+    $('fCliNom').value = '';
+    $('fCliNif').value = '';
+    $('fCliDir').value = '';
+  }
+}
+
+$('btnAddConcepto').addEventListener('click', () => { addConceptoRow(); });
+
+function addConceptoRow(desc = '', uds = 1, precio = '') {
+  conceptN++;
+  const n = conceptN;
+  const row = document.createElement('div');
+  row.className = 'concept-row';
+  row.id = 'cr-' + n;
+  row.innerHTML = `
+    <div>
+      <label>Descripción</label>
+      <input type="text" class="c-d" placeholder="Concepto..." value="${desc}" oninput="calcTotals()">
+    </div>
+    <div>
+      <label>Uds.</label>
+      <input type="number" class="c-u" value="${uds}" step="0.01" min="0" oninput="calcTotals()">
+    </div>
+    <div>
+      <label>€/ud</label>
+      <input type="number" class="c-p" value="${precio}" step="0.01" min="0" placeholder="0.00" oninput="calcTotals()">
+    </div>
+    <button type="button" class="btn-rm" onclick="rmConcepto(${n})">×</button>
+  `;
+  $('conceptosCont').appendChild(row);
+}
+
+function rmConcepto(n) {
+  const el = $('cr-' + n);
+  if (el) { el.remove(); calcTotals(); }
+}
+
+function getConceptos() {
+  return Array.from(document.querySelectorAll('.concept-row')).map(row => {
+    const u = parseFloat(row.querySelector('.c-u').value) || 0;
+    const p = parseFloat(row.querySelector('.c-p').value) || 0;
+    return { descripcion: row.querySelector('.c-d').value, unidades: u, precio_ud: p, total: +(u * p).toFixed(2) };
+  }).filter(c => c.descripcion || c.total);
+}
+
+function calcTotals() {
+  const base  = getConceptos().reduce((s, c) => s + c.total, 0);
+  const igic  = base * 0.07;
+  const irpf  = base * 0.15;
+  const total = base + igic - irpf;
+  $('pBase').textContent  = fmt(base);
+  $('pIgic').textContent  = fmt(igic);
+  $('pIrpf').textContent  = '−' + fmt(irpf);
+  $('pTotal').textContent = fmt(total);
+}
+
+$('factForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const sel = $('fClienteSel').value;
+  let cliNom, cliNif, cliDir;
+
+  if (sel === 'avon') {
+    ({ nombre: cliNom, nif: cliNif, dir: cliDir } = CLI_PREDEFINED.avon);
+  } else {
+    cliNom = $('fCliNom').value.trim();
+    cliNif = $('fCliNif').value.trim();
+    cliDir = $('fCliDir').value.trim();
+  }
+
+  if (!cliNom) { toast('Indica el nombre del cliente', true); return; }
+
+  const conceptos = getConceptos();
+  if (!conceptos.length) { toast('Añade al menos un concepto', true); return; }
+
+  const base  = conceptos.reduce((s, c) => s + c.total, 0);
+  const igic  = base * 0.07;
+  const irpf  = base * 0.15;
+  const total = base + igic - irpf;
+
+  const { error } = await db.from('facturas').insert({
+    numero:            $('fNum').value,
+    fecha:             $('fFecha').value,
+    cliente_nombre:    cliNom,
+    cliente_nif:       cliNif,
+    cliente_direccion: cliDir,
+    conceptos,
+    base_imponible:    +base.toFixed(2),
+    iva_pct:           7,
+    irpf_pct:          15,
+    total:             +total.toFixed(2),
+    estado:            'pendiente',
+    notas:             $('fNotas').value,
+  });
+
+  if (error) { toast('Error: ' + error.message, true); return; }
+  closeM('overlayFactura');
+  toast('Factura creada ✓');
+  loadFacturas();
+});
+
+/* ════════════════════════════════════════════════════
+   FACTURA PREVIEW
+════════════════════════════════════════════════════ */
+async function showPreview(id) {
+  const { data: f, error } = await db.from('facturas').select('*').eq('id', id).single();
+  if (error || !f) { toast('Error al cargar factura', true); return; }
+  previewId = id;
+
+  const conceptos = Array.isArray(f.conceptos) ? f.conceptos : [];
+
+  $('invPaper').innerHTML = `
+    <div class="inv-paper-head">
+      <div>
+        <div class="inv-paper-logo">Julieta <span>Bolullo</span></div>
+        <div class="inv-paper-logo-sub">
+          DNI: ${ME.dni}<br>
+          ${ME.direccion} · ${ME.ciudad}<br>
+          ${ME.telefono} · ${ME.web}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="inv-paper-num">${f.numero}</div>
+        <div class="inv-paper-meta">Fecha: ${fmtD(f.fecha)}</div>
+      </div>
+    </div>
+
+    <div class="inv-parties">
+      <div>
+        <div class="party-label">Emisor</div>
+        <div class="party-name">${ME.nombre}</div>
+        <div class="party-detail">
+          DNI: ${ME.dni}<br>
+          ${ME.direccion}<br>
+          ${ME.ciudad}<br>
+          Tel: ${ME.telefono}
+        </div>
+      </div>
+      <div>
+        <div class="party-label">Cliente / Destinatario</div>
+        <div class="party-name">${f.cliente_nombre}</div>
+        <div class="party-detail">
+          ${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}
+          ${f.cliente_direccion || ''}
+        </div>
+      </div>
+    </div>
+
+    <table class="inv-table">
+      <thead>
+        <tr>
+          <th>Descripción</th>
+          <th class="tr">Uds.</th>
+          <th class="tr">Precio/ud</th>
+          <th class="tr">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${conceptos.map(c => `
+          <tr>
+            <td>${c.descripcion}</td>
+            <td class="tr">${c.unidades}</td>
+            <td class="tr">${fmt(c.precio_ud)}</td>
+            <td class="tr">${fmt(c.total)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="inv-totals">
+      <div class="inv-tot-row">
+        <span class="tl">Base imponible</span>
+        <span class="tv">${fmt(f.base_imponible)}</span>
+      </div>
+      <div class="inv-tot-row">
+        <span class="tl">IGIC (${f.iva_pct}%)</span>
+        <span class="tv">${fmt(f.base_imponible * f.iva_pct / 100)}</span>
+      </div>
+      <div class="inv-tot-row">
+        <span class="tl">IRPF (−${f.irpf_pct}%)</span>
+        <span class="tv" style="color:#c00">−${fmt(f.base_imponible * f.irpf_pct / 100)}</span>
+      </div>
+      <div class="inv-tot-row tf">
+        <span class="tl">TOTAL A PERCIBIR</span>
+        <span class="tv">${fmt(f.total)}</span>
+      </div>
+    </div>
+
+    ${f.notas ? `
+      <div class="inv-notes">
+        <strong>Notas:</strong><br>
+        ${f.notas.replace(/\n/g, '<br>')}
+      </div>
+    ` : ''}
+  `;
+
+  // Status buttons
+  ['pendiente','pagada','cancelada'].forEach(s => {
+    const btn = document.getElementById('sBtn' + s[0].toUpperCase() + s.slice(1));
+    if (f.estado === s) {
+      btn.className = `btn btn-sm badge-${s}`;
+      btn.style.opacity = '1';
+    } else {
+      btn.className = 'btn btn-sm btn-ghost';
+      btn.style.opacity = '.55';
+    }
+  });
+
+  openM('overlayPreview');
+}
+
+// Status change
+['pendiente','pagada','cancelada'].forEach(s => {
+  const btn = document.getElementById('sBtn' + s[0].toUpperCase() + s.slice(1));
+  btn.addEventListener('click', async () => {
+    if (!previewId) return;
+    const { error } = await db.from('facturas').update({ estado: s }).eq('id', previewId);
+    if (error) { toast('Error', true); return; }
+    toast('Estado → ' + s);
+    loadFacturas();
+    showPreview(previewId);
+  });
+});
+
+$('btnPrint').addEventListener('click', () => window.print());
+
+/* ════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════ */
+async function init() {
+  updateMonthDisplay();
+  await Promise.all([loadCats(), loadClis()]);
+  await loadDashboard();
+}
+
+init();
+</script>
+</body>
+</html>
