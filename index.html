@@ -648,6 +648,19 @@
 
         <hr class="divider">
 
+        <div class="card-title" style="font-size:.85rem;margin-bottom:.75rem">Clientes</div>
+        <div class="cat-tags" id="cliTags"></div>
+        <div style="display:flex;flex-direction:column;gap:.45rem" id="newCliForm">
+          <input type="text" id="newCliNom" placeholder="Nombre / Razón social">
+          <div style="display:flex;gap:.45rem">
+            <input type="text" id="newCliNif" placeholder="NIF / CIF" style="flex:1">
+            <input type="text" id="newCliDir" placeholder="Dirección" style="flex:2">
+            <button class="btn btn-ghost btn-sm" id="addCliBtn">+</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
         <div class="card-title" style="font-size:.85rem;margin-bottom:.75rem">Categorías</div>
         <div class="cat-tags" id="catTags"></div>
         <div style="display:flex;gap:.45rem">
@@ -986,6 +999,45 @@ function filterCatSelect() {
 
 $('movBloque').addEventListener('change', filterCatSelect);
 
+function renderCliTags(dbClis) {
+  const el = $('cliTags');
+  if (!el) return;
+  // Mostrar todos (seed + db)
+  const all = [
+    ...CLI_SEED.map(s => ({ id: null, nombre: s.nombre, nif: s.nif, seed: true })),
+    ...dbClis.filter(c => !CLI_SEED.some(s => s.nombre.toLowerCase() === c.nombre.toLowerCase()))
+             .map(c => ({ id: c.id, nombre: c.nombre, nif: c.nif || '', seed: false }))
+  ];
+  el.innerHTML = all.map(c => `
+    <span class="cat-tag" style="display:inline-flex;align-items:center;gap:.3rem">
+      <span title="${c.nif || ''}">${c.nombre}</span>
+      ${!c.seed ? `<button onclick="deleteCli('${c.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:0 2px" title="Eliminar">×</button>` : ''}
+    </span>
+  `).join('');
+}
+
+$('addCliBtn').addEventListener('click', async () => {
+  const nombre = $('newCliNom').value.trim();
+  const nif    = $('newCliNif').value.trim();
+  const dir    = $('newCliDir').value.trim();
+  if (!nombre) { toast('Escribe el nombre del cliente', true); return; }
+  const { error } = await db.from('clientes').insert({ nombre, nif, direccion: dir });
+  if (error) { toast('Error: ' + error.message, true); return; }
+  $('newCliNom').value = '';
+  $('newCliNif').value = '';
+  $('newCliDir').value = '';
+  await loadClis();
+  toast('Cliente "' + nombre + '" añadido ✓');
+});
+
+async function deleteCli(id) {
+  if (!confirm('¿Eliminar este cliente?')) return;
+  const { error } = await db.from('clientes').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  await loadClis();
+  toast('Cliente eliminado');
+}
+
 $('addCatBtn').addEventListener('click', async () => {
   const nombre = $('newCatName').value.trim();
   const bloque = $('newCatBloque').value;
@@ -1002,18 +1054,34 @@ $('addCatBtn').addEventListener('click', async () => {
 ════════════════════════════════════════════════════ */
 async function loadClis() {
   const { data } = await db.from('clientes').select('*').order('nombre');
-  // Mezcla clientes de Supabase + seed predefinidos (sin duplicar por nombre)
   const dbClis = data || [];
   const dbNombres = dbClis.map(c => c.nombre.toLowerCase());
   const seedExtra = CLI_SEED.filter(s => !dbNombres.includes(s.nombre.toLowerCase()));
-  // Los seed extra los representamos con id negativo/key para no confundir con ids reales
-  const seedClis = seedExtra.map((s, i) => ({ id: 'seed_' + s.key, nombre: s.nombre, nif: s.nif }));
+  const seedClis = seedExtra.map(s => ({ id: 'seed_' + s.key, nombre: s.nombre, nif: s.nif }));
   clis = [...dbClis, ...seedClis];
 
+  // Dropdowns de movimientos
   const opts = '<option value="">Sin cliente / Genérico</option>' +
     clis.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
   if ($('movCliente'))      $('movCliente').innerHTML = opts;
   if ($('movGastoCliente')) $('movGastoCliente').innerHTML = opts;
+
+  // Dropdown de facturas — mezcla seeds + clientes Supabase
+  const fCliSel = $('fClienteSel');
+  if (fCliSel) {
+    // Mantener las opciones predefinidas y añadir las de Supabase que no estén
+    const existing = Array.from(fCliSel.options).map(o => o.value);
+    dbClis.forEach(c => {
+      if (!existing.includes('db_' + c.id)) {
+        const opt = document.createElement('option');
+        opt.value = 'db_' + c.id;
+        opt.textContent = c.nombre;
+        fCliSel.insertBefore(opt, fCliSel.querySelector('option[value="otro"]'));
+      }
+    });
+  }
+
+  renderCliTags(dbClis);
 }
 
 /* ════════════════════════════════════════════════════
@@ -1369,19 +1437,32 @@ $('fClienteSel').addEventListener('change', handleClienteSel);
 
 function handleClienteSel() {
   const val = $('fClienteSel').value;
-  const cli = CLI_PREDEFINED[val];
-  const show = !cli || !cli.nombre || val === 'otro';
-  $('clienteManual').style.display = show ? '' : 'none';
-  if (cli && cli.nombre) {
-    $('fCliNom').value = cli.nombre;
-    $('fCliNif').value = cli.nif;
-    $('fCliDir').value = cli.dir;
+  let nombre = '', nif = '', dir = '';
+
+  if (val.startsWith('db_')) {
+    // Cliente guardado en Supabase
+    const dbId = val.replace('db_', '');
+    const found = clis.find(c => String(c.id) === dbId);
+    if (found) { nombre = found.nombre; nif = found.nif || ''; dir = found.direccion || ''; }
+    $('clienteManual').style.display = '';
+    $('fCliNom').value = nombre;
+    $('fCliNif').value = nif;
+    $('fCliDir').value = dir;
   } else {
-    $('fCliNom').value = '';
-    $('fCliNif').value = '';
-    $('fCliDir').value = '';
+    const cli = CLI_PREDEFINED[val];
+    const show = !cli || !cli.nombre || val === 'otro';
+    $('clienteManual').style.display = show ? '' : 'none';
+    if (cli && cli.nombre) {
+      $('fCliNom').value = cli.nombre;
+      $('fCliNif').value = cli.nif;
+      $('fCliDir').value = cli.dir;
+    } else {
+      $('fCliNom').value = '';
+      $('fCliNif').value = '';
+      $('fCliDir').value = '';
+    }
   }
-  // Actualizar notas según cliente
+  // Notas según cliente (Avon sin condición 50/50)
   if ($('fNotas')) $('fNotas').value = notasForCliente(val);
 }
 
