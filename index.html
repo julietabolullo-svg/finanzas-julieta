@@ -673,7 +673,7 @@
     <!-- BREAKDOWN BARS -->
     <div class="three-col">
       <div class="card">
-        <div class="card-title">Ingresos por cliente</div>
+        <div class="card-title">Ingresos por cliente / factura</div>
         <div id="barIng"></div>
       </div>
       <div class="card">
@@ -1165,7 +1165,12 @@ async function deleteMov() {
 }
 
 function renderBreakdowns(ingresos, gastos) {
-  const byClient  = groupBy(ingresos, m => m.clientes?.nombre || 'Sin cliente');
+  // Extraer cliente: del join Supabase, o del patrón "FAC-XXXX · NombreCliente · ..."
+  const byClient  = groupBy(ingresos, m => {
+    if (m.clientes?.nombre) return m.clientes.nombre;
+    const parts = (m.descripcion || '').split(' · ');
+    return parts.length >= 2 ? parts[1] : 'Sin cliente';
+  });
   const byEmpresa = groupBy(gastos.filter(m => m.bloque === 'empresa'), m => m.categorias?.nombre || 'Sin categoría');
   const byPersonal= groupBy(gastos.filter(m => m.bloque === 'personal'), m => m.categorias?.nombre || 'Sin categoría');
 
@@ -1256,26 +1261,31 @@ async function loadFacturas() {
 
   container.innerHTML = data.map(f => `
     <div class="inv-item" data-id="${f.id}">
-      <div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="showPreview('${f.id}')">
         <div class="inv-num">${f.numero}</div>
         <div class="inv-cli">${f.cliente_nombre}</div>
         <div class="inv-date">${fmtD(f.fecha)}</div>
       </div>
-      <div class="inv-right">
+      <div class="inv-right" style="align-items:flex-end;gap:.4rem">
         <div class="inv-total">${fmt(f.total)}</div>
         <span class="badge badge-${f.estado}">${f.estado}</span>
+        ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
       </div>
     </div>
   `).join('');
-
-  document.querySelectorAll('.inv-item').forEach(item =>
-    item.addEventListener('click', () => showPreview(item.dataset.id))
-  );
 }
 
 /* ════════════════════════════════════════════════════
    NUEVA FACTURA
 ════════════════════════════════════════════════════ */
+async function marcarPagada(id) {
+  const { error } = await db.from('facturas').update({ estado: 'pagada' }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Factura marcada como pagada ✓');
+  loadFacturas();
+  loadDashboard();
+}
+
 async function nextInvoiceNum() {
   const { data } = await db.from('facturas').select('numero').order('created_at', { ascending: false }).limit(1);
   const today = new Date();
@@ -1431,13 +1441,17 @@ $('factForm').addEventListener('submit', async e => {
 
   // Crear movimiento de ingreso automáticamente
   const desc = conceptos.map(c => c.descripcion).filter(Boolean).join(', ');
-  await db.from('movimientos').insert({
+  const movInsert = {
     tipo:        'ingreso',
     fecha:       $('fFecha').value,
     importe:     +total.toFixed(2),
-    descripcion: $('fNum').value + (desc ? ' · ' + desc : ''),
+    descripcion: $('fNum').value + ' · ' + cliNom + (desc ? ' · ' + desc : ''),
     bloque:      'empresa',
-  });
+  };
+  // Vincular cliente si existe en Supabase
+  const cliMatch = clis.find(c => c.nombre === cliNom && !String(c.id).startsWith('seed_'));
+  if (cliMatch) movInsert.cliente_id = cliMatch.id;
+  await db.from('movimientos').insert(movInsert);
 
   closeM('overlayFactura');
   toast('Factura creada ✓');
