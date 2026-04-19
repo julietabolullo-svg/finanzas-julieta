@@ -287,6 +287,12 @@
     }
     .mov-amt.ingreso { color: var(--green); }
     .mov-amt.gasto   { color: var(--red); }
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; opacity: .5; padding: 2px 4px;
+      border-radius: 6px; transition: opacity .15s;
+    }
+    .btn-icon:hover { opacity: 1; background: rgba(255,255,255,.07); }
 
     /* ── BARS ───────────────────────────────────────── */
     .bar-item { margin-bottom: .85rem; }
@@ -784,6 +790,60 @@
 </div>
 
 <!-- ═══════════════ MODAL: PREVIEW FACTURA ═══════════════ -->
+<div class="overlay hidden" id="overlayEditMov">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Editar movimiento</div>
+      <button class="modal-close" data-close="overlayEditMov">&times;</button>
+    </div>
+    <input type="hidden" id="editMovId">
+    <input type="hidden" id="editMovTipo">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="editMovFecha" required>
+      </div>
+      <div class="form-group">
+        <label>Importe (€)</label>
+        <input type="number" id="editMovImporte" step="0.01" min="0" required>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Descripción</label>
+      <input type="text" id="editMovDesc">
+    </div>
+    <div id="editIngresoFields">
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="editMovCliente"><option value="">Sin cliente</option></select>
+      </div>
+    </div>
+    <div id="editGastoFields">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Bloque</label>
+          <select id="editMovBloque">
+            <option value="empresa">Empresa</option>
+            <option value="personal">Personal</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <select id="editMovCategoria"><option value="">Sin categoría</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Imputar a cliente (opcional)</label>
+        <select id="editMovGastoCliente"><option value="">Sin cliente / Genérico</option></select>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem;margin-top:1rem">
+      <button class="btn btn-primary btn-full" onclick="saveEditMov()">Guardar cambios</button>
+      <button class="btn btn-danger" onclick="deleteMov()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="overlayPreview">
   <div class="modal wide">
     <div class="modal-head">
@@ -1021,15 +1081,87 @@ function renderMovList(movs) {
   if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
   ul.innerHTML = movs.map(m => `
     <li class="mov-item">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="mov-desc">${m.descripcion || '—'}</div>
         <div class="mov-meta">
           ${fmtD(m.fecha)}${m.clientes ? ' · ' + m.clientes.nombre : ''}${m.categorias ? ' · ' + m.categorias.nombre : ''}${m.bloque ? ' · ' + m.bloque : ''}
         </div>
       </div>
-      <div class="mov-amt ${m.tipo}">${m.tipo === 'gasto' ? '−' : '+'}${fmt(m.importe)}</div>
+      <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
+        <div class="mov-amt ${m.tipo}">${m.tipo === 'gasto' ? '−' : '+'}${fmt(m.importe)}</div>
+        <button class="btn-icon" onclick="openEditMov(${JSON.stringify(m).replace(/"/g,'&quot;')})" title="Editar">✏️</button>
+      </div>
     </li>
   `).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   EDITAR / ELIMINAR MOVIMIENTOS
+════════════════════════════════════════════════════ */
+function openEditMov(m) {
+  $('editMovId').value      = m.id;
+  $('editMovTipo').value    = m.tipo;
+  $('editMovFecha').value   = m.fecha;
+  $('editMovImporte').value = m.importe;
+  $('editMovDesc').value    = m.descripcion || '';
+
+  const isIngreso = m.tipo === 'ingreso';
+  $('editIngresoFields').style.display = isIngreso ? '' : 'none';
+  $('editGastoFields').style.display   = isIngreso ? 'none' : '';
+
+  // Poblar selects con los mismos clientes/categorías que el form principal
+  const cliOpts = '<option value="">Sin cliente / Genérico</option>' +
+    clis.map(c => `<option value="${c.id}"${c.id == m.cliente_id ? ' selected' : ''}>${c.nombre}</option>`).join('');
+  $('editMovCliente').innerHTML      = cliOpts;
+  $('editMovGastoCliente').innerHTML = cliOpts;
+
+  const catOpts = '<option value="">Sin categoría</option>' +
+    cats.map(c => `<option value="${c.id}"${c.id == m.categoria_id ? ' selected' : ''}>${c.nombre}</option>`).join('');
+  $('editMovCategoria').innerHTML = catOpts;
+
+  if (!isIngreso) {
+    $('editMovBloque').value = m.bloque || 'empresa';
+    if (m.cliente_id) $('editMovGastoCliente').value = m.cliente_id;
+  } else {
+    if (m.cliente_id) $('editMovCliente').value = m.cliente_id;
+  }
+
+  openM('overlayEditMov');
+}
+
+async function saveEditMov() {
+  const id     = $('editMovId').value;
+  const tipo   = $('editMovTipo').value;
+  const update = {
+    fecha:       $('editMovFecha').value,
+    importe:     parseFloat($('editMovImporte').value),
+    descripcion: $('editMovDesc').value.trim(),
+  };
+  if (tipo === 'ingreso') {
+    const cId = $('editMovCliente').value;
+    update.cliente_id = cId && !cId.startsWith('seed_') ? cId : null;
+  } else {
+    update.bloque = $('editMovBloque').value;
+    const catId = $('editMovCategoria').value;
+    update.categoria_id = catId || null;
+    const gCId = $('editMovGastoCliente').value;
+    update.cliente_id = gCId && !gCId.startsWith('seed_') ? gCId : null;
+  }
+  const { error } = await db.from('movimientos').update(update).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  closeM('overlayEditMov');
+  toast('Movimiento actualizado ✓');
+  loadDashboard();
+}
+
+async function deleteMov() {
+  const id = $('editMovId').value;
+  if (!confirm('¿Eliminar este movimiento? No se puede deshacer.')) return;
+  const { error } = await db.from('movimientos').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  closeM('overlayEditMov');
+  toast('Movimiento eliminado');
+  loadDashboard();
 }
 
 function renderBreakdowns(ingresos, gastos) {
