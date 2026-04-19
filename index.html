@@ -721,11 +721,12 @@
 <div class="overlay hidden" id="overlayFactura">
   <div class="modal">
     <div class="modal-head">
-      <div class="modal-title">Nueva factura</div>
+      <div class="modal-title" id="factModalTitle">Nueva factura</div>
       <button class="modal-close" data-close="overlayFactura">&times;</button>
     </div>
 
     <form id="factForm">
+      <input type="hidden" id="editFacturaId">
       <div class="form-row">
         <div class="form-group">
           <label>Número</label>
@@ -1076,9 +1077,11 @@ async function loadDashboard() {
   renderBreakdowns(ingresos, gastos);
 }
 
+const _movCache = {};
 function renderMovList(movs) {
   const ul = $('movList');
   if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
+  movs.forEach(m => _movCache[m.id] = m);
   ul.innerHTML = movs.map(m => `
     <li class="mov-item">
       <div style="flex:1;min-width:0">
@@ -1089,7 +1092,7 @@ function renderMovList(movs) {
       </div>
       <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
         <div class="mov-amt ${m.tipo}">${m.tipo === 'gasto' ? '−' : '+'}${fmt(m.importe)}</div>
-        <button class="btn-icon" onclick="openEditMov(${JSON.stringify(m).replace(/"/g,'&quot;')})" title="Editar">✏️</button>
+        <button class="btn-icon" onclick="openEditMov('${m.id}')" title="Editar">✏️</button>
       </div>
     </li>
   `).join('');
@@ -1098,7 +1101,9 @@ function renderMovList(movs) {
 /* ════════════════════════════════════════════════════
    EDITAR / ELIMINAR MOVIMIENTOS
 ════════════════════════════════════════════════════ */
-function openEditMov(m) {
+function openEditMov(id) {
+  const m = _movCache[id];
+  if (!m) { toast('No se pudo cargar el movimiento', true); return; }
   $('editMovId').value      = m.id;
   $('editMovTipo').value    = m.tipo;
   $('editMovFecha').value   = m.fecha;
@@ -1244,9 +1249,11 @@ $('movForm').addEventListener('submit', async e => {
 /* ════════════════════════════════════════════════════
    FACTURAS — LIST
 ════════════════════════════════════════════════════ */
+const _factCache = {};
 async function loadFacturas() {
   const { data, error } = await db.from('facturas').select('*').order('created_at', { ascending: false });
   if (error) { toast('Error cargando facturas', true); return; }
+  data.forEach(f => _factCache[f.id] = f);
 
   const total   = data.reduce((s, f) => s + (f.total || 0), 0);
   const cobrado = data.filter(f => f.estado === 'pagada').reduce((s, f) => s + (f.total || 0), 0);
@@ -1270,6 +1277,7 @@ async function loadFacturas() {
         <div class="inv-total">${fmt(f.total)}</div>
         <span class="badge badge-${f.estado}">${f.estado}</span>
         ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
+        <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
       </div>
     </div>
   `).join('');
@@ -1278,6 +1286,37 @@ async function loadFacturas() {
 /* ════════════════════════════════════════════════════
    NUEVA FACTURA
 ════════════════════════════════════════════════════ */
+function openEditFactura(id) {
+  const f = _factCache[id];
+  if (!f) { toast('No se pudo cargar la factura', true); return; }
+
+  $('editFacturaId').value = f.id;
+  $('factModalTitle').textContent = 'Editar factura';
+  $('fNum').value   = f.numero;
+  $('fFecha').value = f.fecha;
+  $('fNotas').value = f.notas || '';
+
+  // Cliente
+  const cliKey = Object.keys(CLI_PREDEFINED).find(k => CLI_PREDEFINED[k].nombre === f.cliente_nombre);
+  if (cliKey && cliKey !== 'otro') {
+    $('fClienteSel').value = cliKey;
+    $('clienteManual').style.display = 'none';
+  } else {
+    $('fClienteSel').value = 'otro';
+    $('clienteManual').style.display = '';
+    $('fCliNom').value = f.cliente_nombre || '';
+    $('fCliNif').value = f.cliente_nif || '';
+    $('fCliDir').value = f.cliente_direccion || '';
+  }
+
+  // Conceptos
+  $('conceptosCont').innerHTML = '';
+  conceptN = 0;
+  (f.conceptos || []).forEach(c => addConceptoRow(c.descripcion, c.unidades, c.precio_ud));
+  calcTotals();
+  openM('overlayFactura');
+}
+
 async function marcarPagada(id) {
   const { error } = await db.from('facturas').update({ estado: 'pagada' }).eq('id', id);
   if (error) { toast('Error: ' + error.message, true); return; }
@@ -1312,6 +1351,8 @@ function notasForCliente(val) {
 }
 
 $('btnNuevaFactura').addEventListener('click', async () => {
+  $('editFacturaId').value = '';
+  $('factModalTitle').textContent = 'Nueva factura';
   $('fNum').value   = await nextInvoiceNum();
   $('fFecha').valueAsDate = new Date();
   $('conceptosCont').innerHTML = '';
@@ -1422,7 +1463,8 @@ $('factForm').addEventListener('submit', async e => {
   const irpf  = base * 0.15;
   const total = base + igic - irpf;
 
-  const { error } = await db.from('facturas').insert({
+  const editId = $('editFacturaId').value;
+  const factData = {
     numero:            $('fNum').value,
     fecha:             $('fFecha').value,
     cliente_nombre:    cliNom,
@@ -1433,28 +1475,38 @@ $('factForm').addEventListener('submit', async e => {
     iva_pct:           7,
     irpf_pct:          15,
     total:             +total.toFixed(2),
-    estado:            'pendiente',
     notas:             $('fNotas').value,
-  });
-
-  if (error) { toast('Error: ' + error.message, true); return; }
-
-  // Crear movimiento de ingreso automáticamente
-  const desc = conceptos.map(c => c.descripcion).filter(Boolean).join(', ');
-  const movInsert = {
-    tipo:        'ingreso',
-    fecha:       $('fFecha').value,
-    importe:     +total.toFixed(2),
-    descripcion: $('fNum').value + ' · ' + cliNom + (desc ? ' · ' + desc : ''),
-    bloque:      'empresa',
   };
-  // Vincular cliente si existe en Supabase
-  const cliMatch = clis.find(c => c.nombre === cliNom && !String(c.id).startsWith('seed_'));
-  if (cliMatch) movInsert.cliente_id = cliMatch.id;
-  await db.from('movimientos').insert(movInsert);
 
-  closeM('overlayFactura');
-  toast('Factura creada ✓');
+  const desc = conceptos.map(c => c.descripcion).filter(Boolean).join(', ');
+  const movDesc = $('fNum').value + ' · ' + cliNom + (desc ? ' · ' + desc : '');
+  const cliMatch = clis.find(c => c.nombre === cliNom && !String(c.id).startsWith('seed_'));
+
+  if (editId) {
+    // ── EDITAR factura existente ──
+    const { error } = await db.from('facturas').update(factData).eq('id', editId);
+    if (error) { toast('Error: ' + error.message, true); return; }
+    // Actualizar movimiento asociado (buscar por número de factura en descripción)
+    await db.from('movimientos')
+      .update({ fecha: factData.fecha, importe: +total.toFixed(2), descripcion: movDesc,
+                ...(cliMatch ? { cliente_id: cliMatch.id } : {}) })
+      .like('descripcion', $('fNum').value + ' ·%');
+    closeM('overlayFactura');
+    toast('Factura actualizada ✓');
+  } else {
+    // ── NUEVA factura ──
+    const { error } = await db.from('facturas').insert({ ...factData, estado: 'pendiente' });
+    if (error) { toast('Error: ' + error.message, true); return; }
+    const movInsert = { tipo: 'ingreso', fecha: factData.fecha, importe: +total.toFixed(2),
+                        descripcion: movDesc, bloque: 'empresa' };
+    if (cliMatch) movInsert.cliente_id = cliMatch.id;
+    await db.from('movimientos').insert(movInsert);
+    closeM('overlayFactura');
+    toast('Factura creada ✓');
+  }
+
+  $('editFacturaId').value = '';
+  $('factModalTitle').textContent = 'Nueva factura';
   loadFacturas();
   loadDashboard();
 });
