@@ -1,0 +1,22 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 9 */5 * *'  # cada 5 días a las 9:00 UTC
+  workflow_dispatch:        # también se puede lanzar a mano
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://hutvzpriavhdyrogqafa.supabase.co/rest/v1/movimientos?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1dHZ6cHJpYXZoZHlyb2dxYWZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NTcyODksImV4cCI6MjA5MTMzMzI4OX0.i7D24N1rW0mHyuEguEBl_PJE2sqgtjSkq7oAmutUygY")
+          echo "Supabase status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "AVISO: Supabase devolvió $STATUS"
+          else
+            echo "OK — Supabase activo"
+          fi
