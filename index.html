@@ -951,8 +951,8 @@ async function loadClis() {
 
   const opts = '<option value="">Sin cliente / Genérico</option>' +
     clis.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
-  $('movCliente').innerHTML = opts;
-  $('movGastoCliente').innerHTML = opts;
+  if ($('movCliente'))      $('movCliente').innerHTML = opts;
+  if ($('movGastoCliente')) $('movGastoCliente').innerHTML = opts;
 }
 
 /* ════════════════════════════════════════════════════
