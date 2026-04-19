@@ -1297,7 +1297,7 @@ async function nextInvoiceNum() {
 $('btnNuevaFactura').addEventListener('click', async () => {
   $('fNum').value   = await nextInvoiceNum();
   $('fFecha').valueAsDate = new Date();
-  $('fNotas').value = `Datos de pago:\nIBAN: ${ME.iban}\n\nEl pago deberá realizarse en un plazo de 30 días desde la fecha de emisión de la factura.\n\nGracias por su confianza.`;
+  $('fNotas').value = `Datos de pago:\nIBAN: ${ME.iban}\n\nEl 50% del importe deberá abonarse antes del inicio del servicio y el 50% restante a la finalización del mismo.\n\nGracias por su confianza.`;
   $('conceptosCont').innerHTML = '';
   conceptN = 0;
   addConceptoRow();
