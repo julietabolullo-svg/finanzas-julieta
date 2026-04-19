@@ -1294,16 +1294,23 @@ async function nextInvoiceNum() {
   return `FAC-${y}-${String(ln + 1).padStart(3,'0')}`;
 }
 
+function notasForCliente(val) {
+  const base = `Datos de pago:\nIBAN: ${ME.iban}`;
+  const condPago = `\n\nEl 50% del importe deberá abonarse antes del inicio del servicio y el 50% restante a la finalización del mismo.`;
+  const gracias = `\n\nGracias por su confianza.`;
+  return base + (val === 'avon' ? '' : condPago) + gracias;
+}
+
 $('btnNuevaFactura').addEventListener('click', async () => {
   $('fNum').value   = await nextInvoiceNum();
   $('fFecha').valueAsDate = new Date();
-  $('fNotas').value = `Datos de pago:\nIBAN: ${ME.iban}\n\nEl 50% del importe deberá abonarse antes del inicio del servicio y el 50% restante a la finalización del mismo.\n\nGracias por su confianza.`;
   $('conceptosCont').innerHTML = '';
   conceptN = 0;
   addConceptoRow();
   calcTotals();
   $('fClienteSel').value = 'avon';
   handleClienteSel();
+  $('fNotas').value = notasForCliente('avon');
   openM('overlayFactura');
 });
 
@@ -1323,6 +1330,8 @@ function handleClienteSel() {
     $('fCliNif').value = '';
     $('fCliDir').value = '';
   }
+  // Actualizar notas según cliente
+  if ($('fNotas')) $('fNotas').value = notasForCliente(val);
 }
 
 $('btnAddConcepto').addEventListener('click', () => { addConceptoRow(); });
