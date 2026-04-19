@@ -699,6 +699,30 @@
       </div>
     </div>
 
+    <!-- ── GANANCIA NETA ───────────────────── -->
+    <div class="card" id="netCard" style="margin-top:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+        <div class="card-title" style="margin:0">Ganancia neta acumulada</div>
+        <select id="netClienteSel" style="width:auto;min-width:180px">
+          <option value="">Todos los clientes</option>
+        </select>
+      </div>
+      <div id="netContent" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;text-align:center">
+        <div>
+          <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.3rem">Ingresos totales</div>
+          <div id="netIng" style="font-size:1.4rem;font-weight:800;color:var(--green)">—</div>
+        </div>
+        <div>
+          <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.3rem">Gastos totales</div>
+          <div id="netGas" style="font-size:1.4rem;font-weight:800;color:var(--red)">—</div>
+        </div>
+        <div>
+          <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.3rem">Ganancia neta</div>
+          <div id="netBal" style="font-size:1.6rem;font-weight:900">—</div>
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- ═══════════════ FACTURAS ═══════════════ -->
@@ -1082,6 +1106,7 @@ async function loadClis() {
   }
 
   renderCliTags(dbClis);
+  populateNetClienteSel();
 }
 
 /* ════════════════════════════════════════════════════
@@ -1143,6 +1168,7 @@ async function loadDashboard() {
 
   renderMovList(movs);
   renderBreakdowns(ingresos, gastos);
+  loadGananciaNetByNombre();   // recarga el cuadro global
 }
 
 const _movCache = {};
@@ -1235,6 +1261,66 @@ async function deleteMov() {
   closeM('overlayEditMov');
   toast('Movimiento eliminado');
   loadDashboard();
+}
+
+/* ════════════════════════════════════════════════════
+   GANANCIA NETA ACUMULADA
+════════════════════════════════════════════════════ */
+async function loadGananciaNet(clienteId = '') {
+  let q = db.from('movimientos').select('tipo,importe,descripcion,cliente_id');
+  if (clienteId) q = q.eq('cliente_id', clienteId);
+  const { data, error } = await q;
+  if (error) return;
+
+  let movs = data || [];
+
+  // Si filtramos por cliente y no hay cliente_id, intentar por descripción
+  if (clienteId === '__desc__') {
+    // handled separately
+  }
+
+  const ing = movs.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + (m.importe || 0), 0);
+  const gas = movs.filter(m => m.tipo === 'gasto').reduce((s, m) => s + (m.importe || 0), 0);
+  const net = ing - gas;
+
+  $('netIng').textContent = fmt(ing);
+  $('netGas').textContent = fmt(gas);
+  $('netBal').textContent = fmt(net);
+  $('netBal').style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function populateNetClienteSel() {
+  const sel = $('netClienteSel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Todos los clientes</option>' +
+    clis.filter(c => !String(c.id).startsWith('seed_'))
+        .map(c => `<option value="${c.id}">${c.nombre}</option>`).join('') +
+    CLI_SEED.map(s => `<option value="seed_${s.key}">${s.nombre}</option>`).join('');
+  sel.onchange = () => {
+    const val = sel.value;
+    if (!val || val.startsWith('seed_')) {
+      // Para seeds filtramos por descripción en el cliente
+      loadGananciaNetByNombre(val ? CLI_SEED.find(s => 'seed_' + s.key === val)?.nombre : '');
+    } else {
+      loadGananciaNet(val);
+    }
+  };
+}
+
+async function loadGananciaNetByNombre(nombre = '') {
+  const { data, error } = await db.from('movimientos').select('tipo,importe,descripcion,cliente_id');
+  if (error) return;
+  let movs = data || [];
+  if (nombre) {
+    movs = movs.filter(m => (m.descripcion || '').toLowerCase().includes(nombre.toLowerCase()));
+  }
+  const ing = movs.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + (m.importe || 0), 0);
+  const gas = movs.filter(m => m.tipo === 'gasto').reduce((s, m) => s + (m.importe || 0), 0);
+  const net = ing - gas;
+  $('netIng').textContent = fmt(ing);
+  $('netGas').textContent = fmt(gas);
+  $('netBal').textContent = fmt(net);
+  $('netBal').style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
 }
 
 function renderBreakdowns(ingresos, gastos) {
