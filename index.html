@@ -631,6 +631,10 @@
                 <select id="movCategoria"><option value="">Sin categoría</option></select>
               </div>
             </div>
+            <div class="form-group">
+              <label>Imputar a cliente (opcional)</label>
+              <select id="movGastoCliente"><option value="">Sin cliente / Genérico</option></select>
+            </div>
           </div>
 
           <button type="submit" class="btn btn-primary btn-full" style="margin-top:.3rem">Guardar movimiento</button>
@@ -731,7 +735,9 @@
         <label>Cliente</label>
         <select id="fClienteSel">
           <option value="avon">AVON COSMETICS S.A.U.</option>
-          <option value="agora">Agora News (Xperia)</option>
+          <option value="xpertia">Xpertia Wimax Communications S.L.</option>
+          <option value="metropolis">Metropolis Comunicación SL</option>
+          <option value="agoranews">Agora News</option>
           <option value="otro">Otro...</option>
         </select>
       </div>
@@ -822,10 +828,21 @@ const ME = {
 };
 
 const CLI_PREDEFINED = {
-  avon:  { nombre: 'AVON COSMETICS S.A.U.',   nif: 'A28151298',  dir: 'C/ Laura Grote de la Puerta nº16, Ed. Alex, P.I. El Mayorazgo, 38108 Santa Cruz de Tenerife' },
-  agora: { nombre: 'Agora News (Xperia)',      nif: '',           dir: '' },
-  otro:  { nombre: '',                         nif: '',           dir: '' },
+  avon:       { nombre: 'AVON COSMETICS S.A.U.',                    nif: 'A28151298',  dir: 'C/ Laura Grote de la Puerta nº16, Ed. Alex, P.I. El Mayorazgo, 38108 Santa Cruz de Tenerife' },
+  xpertia:    { nombre: 'Xpertia Wimax Communications S.L.',        nif: 'B74323411',  dir: 'C/Abades 11, 28012, Madrid' },
+  metropolis: { nombre: 'Metropolis Comunicación SL',               nif: 'B38402756',  dir: 'Plaza Doctor Oliviera 15 1b, 38202 San Cristóbal de La Laguna, Tenerife' },
+  agoranews:  { nombre: 'Agora News',                               nif: '',           dir: '' },
+  otro:       { nombre: '',                                          nif: '',           dir: '' },
 };
+
+// Clientes siempre disponibles (fallback si Supabase clientes está vacío)
+const CLI_SEED = [
+  { key: 'avon',       nombre: 'AVON COSMETICS S.A.U.',             nif: 'A28151298'  },
+  { key: 'xpertia',    nombre: 'Xpertia Wimax Communications S.L.', nif: 'B74323411'  },
+  { key: 'metropolis', nombre: 'Metropolis Comunicación SL',        nif: 'B38402756'  },
+  { key: 'agoranews',  nombre: 'Agora News',                        nif: ''           },
+  { key: 'agenciaia',  nombre: 'Agencia IA (genérico)',             nif: ''           },
+];
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -927,9 +944,18 @@ $('addCatBtn').addEventListener('click', async () => {
 ════════════════════════════════════════════════════ */
 async function loadClis() {
   const { data } = await db.from('clientes').select('*').order('nombre');
-  clis = data || [];
-  $('movCliente').innerHTML = '<option value="">Sin cliente</option>' +
+  // Mezcla clientes de Supabase + seed predefinidos (sin duplicar por nombre)
+  const dbClis = data || [];
+  const dbNombres = dbClis.map(c => c.nombre.toLowerCase());
+  const seedExtra = CLI_SEED.filter(s => !dbNombres.includes(s.nombre.toLowerCase()));
+  // Los seed extra los representamos con id negativo/key para no confundir con ids reales
+  const seedClis = seedExtra.map((s, i) => ({ id: 'seed_' + s.key, nombre: s.nombre, nif: s.nif }));
+  clis = [...dbClis, ...seedClis];
+
+  const opts = '<option value="">Sin cliente / Genérico</option>' +
     clis.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  $('movCliente').innerHTML = opts;
+  $('movGastoCliente').innerHTML = opts;
 }
 
 /* ════════════════════════════════════════════════════
@@ -1059,11 +1085,19 @@ $('movForm').addEventListener('submit', async e => {
   if (movTipo === 'ingreso') {
     mov.bloque = 'empresa';
     const cId = $('movCliente').value;
-    if (cId) mov.cliente_id = cId;
+    if (cId && !cId.startsWith('seed_')) mov.cliente_id = cId;
+    else if (cId) mov.descripcion = mov.descripcion; // seed client, solo nombre
   } else {
     mov.bloque = $('movBloque').value;
     const catId = $('movCategoria').value;
     if (catId) mov.categoria_id = catId;
+    const gCId = $('movGastoCliente').value;
+    if (gCId && !gCId.startsWith('seed_')) mov.cliente_id = gCId;
+    // Si es seed, añadimos el nombre a la descripción para que quede registrado
+    if (gCId && gCId.startsWith('seed_')) {
+      const cli = clis.find(c => c.id === gCId);
+      if (cli) mov.descripcion = mov.descripcion + ' [' + cli.nombre + ']';
+    }
   }
   const { error } = await db.from('movimientos').insert(mov);
   if (error) { toast('Error: ' + error.message, true); return; }
@@ -1148,13 +1182,14 @@ $('fClienteSel').addEventListener('change', handleClienteSel);
 
 function handleClienteSel() {
   const val = $('fClienteSel').value;
-  const show = val === 'agora' || val === 'otro';
+  const cli = CLI_PREDEFINED[val];
+  const show = !cli || !cli.nombre || val === 'otro';
   $('clienteManual').style.display = show ? '' : 'none';
-  if (val === 'agora') {
-    $('fCliNom').value = 'Agora News (Xperia)';
-    $('fCliNif').value = '';
-    $('fCliDir').value = '';
-  } else if (val === 'otro') {
+  if (cli && cli.nombre) {
+    $('fCliNom').value = cli.nombre;
+    $('fCliNif').value = cli.nif;
+    $('fCliDir').value = cli.dir;
+  } else {
     $('fCliNom').value = '';
     $('fCliNif').value = '';
     $('fCliDir').value = '';
@@ -1216,8 +1251,13 @@ $('factForm').addEventListener('submit', async e => {
   const sel = $('fClienteSel').value;
   let cliNom, cliNif, cliDir;
 
-  if (sel === 'avon') {
-    ({ nombre: cliNom, nif: cliNif, dir: cliDir } = CLI_PREDEFINED.avon);
+  if (CLI_PREDEFINED[sel]) {
+    ({ nombre: cliNom, nif: cliNif, dir: cliDir } = CLI_PREDEFINED[sel]);
+    if (!cliNom) {
+      cliNom = $('fCliNom').value.trim();
+      cliNif = $('fCliNif').value.trim();
+      cliDir = $('fCliDir').value.trim();
+    }
   } else {
     cliNom = $('fCliNom').value.trim();
     cliNif = $('fCliNif').value.trim();
@@ -1250,9 +1290,21 @@ $('factForm').addEventListener('submit', async e => {
   });
 
   if (error) { toast('Error: ' + error.message, true); return; }
+
+  // Crear movimiento de ingreso automáticamente
+  const desc = conceptos.map(c => c.descripcion).filter(Boolean).join(', ');
+  await db.from('movimientos').insert({
+    tipo:        'ingreso',
+    fecha:       $('fFecha').value,
+    importe:     +total.toFixed(2),
+    descripcion: $('fNum').value + (desc ? ' · ' + desc : ''),
+    bloque:      'empresa',
+  });
+
   closeM('overlayFactura');
   toast('Factura creada ✓');
   loadFacturas();
+  loadDashboard();
 });
 
 /* ════════════════════════════════════════════════════
