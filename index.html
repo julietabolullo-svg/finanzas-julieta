@@ -1647,16 +1647,36 @@ $('factForm').addEventListener('submit', async e => {
 
   const desc = conceptos.map(c => c.descripcion).filter(Boolean).join(', ');
   const movDesc = $('fNum').value + ' · ' + cliNom + (desc ? ' · ' + desc : '');
-  const cliMatch = clis.find(c => c.nombre === cliNom && !String(c.id).startsWith('seed_'));
+
+  // Obtener o crear el cliente en Supabase para tener siempre un cliente_id real
+  let cliId = null;
+  let cliMatch = clis.find(c => c.nombre === cliNom && !String(c.id).startsWith('seed_'));
+  if (cliMatch) {
+    cliId = cliMatch.id;
+  } else {
+    // El cliente es seed o nuevo — lo insertamos/buscamos en Supabase
+    const { data: existing } = await db.from('clientes').select('id').eq('nombre', cliNom).limit(1);
+    if (existing && existing.length) {
+      cliId = existing[0].id;
+    } else {
+      const { data: inserted } = await db.from('clientes').insert({
+        nombre: cliNom,
+        nif: cliNif || '',
+        direccion: cliDir || ''
+      }).select('id').single();
+      if (inserted) cliId = inserted.id;
+    }
+    // Recargar lista de clientes para reflejar el nuevo
+    if (cliId) await loadClis();
+  }
 
   if (editId) {
     // ── EDITAR factura existente ──
     const { error } = await db.from('facturas').update(factData).eq('id', editId);
     if (error) { toast('Error: ' + error.message, true); return; }
-    // Actualizar movimiento asociado (buscar por número de factura en descripción)
     await db.from('movimientos')
       .update({ fecha: factData.fecha, importe: +total.toFixed(2), descripcion: movDesc,
-                ...(cliMatch ? { cliente_id: cliMatch.id } : {}) })
+                ...(cliId ? { cliente_id: cliId } : {}) })
       .like('descripcion', $('fNum').value + ' ·%');
     closeM('overlayFactura');
     toast('Factura actualizada ✓');
@@ -1665,8 +1685,8 @@ $('factForm').addEventListener('submit', async e => {
     const { error } = await db.from('facturas').insert({ ...factData, estado: 'pendiente' });
     if (error) { toast('Error: ' + error.message, true); return; }
     const movInsert = { tipo: 'ingreso', fecha: factData.fecha, importe: +total.toFixed(2),
-                        descripcion: movDesc, bloque: 'empresa' };
-    if (cliMatch) movInsert.cliente_id = cliMatch.id;
+                        descripcion: movDesc, bloque: 'empresa',
+                        ...(cliId ? { cliente_id: cliId } : {}) };
     await db.from('movimientos').insert(movInsert);
     closeM('overlayFactura');
     toast('Factura creada ✓');
