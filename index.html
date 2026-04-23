@@ -545,6 +545,90 @@
     }
     .toast.show { transform: translateY(0); opacity: 1; }
 
+    /* ── HACIENDA PANEL ─────────────────────────────── */
+    .hac-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .fiscal-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: .8rem;
+      gap: .5rem;
+    }
+    .fiscal-line:last-child { border-bottom: none; }
+    .fiscal-line .fl { color: var(--muted); flex: 1; }
+    .fiscal-line .fv { font-weight: 500; flex-shrink: 0; }
+    .fiscal-total {
+      border-top: 2px solid var(--accent) !important;
+      border-bottom: none !important;
+      margin-top: .4rem;
+      padding-top: .7rem !important;
+    }
+    .fiscal-total .fl { color: var(--sand) !important; font-weight: 500; }
+    .fiscal-total .fv { font-size: .95rem; }
+    .fv-pagar  { color: var(--red) !important; }
+    .fv-dev    { color: var(--green) !important; }
+    .q-nav {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.75rem;
+    }
+    .q-display {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--sand);
+      min-width: 130px;
+    }
+    .hac-detail-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--border);
+      gap: .5rem;
+      font-size: .84rem;
+    }
+    .hac-detail-item:last-child { border-bottom: none; }
+
+    /* ── TICKET SCANNER ─────────────────────────────── */
+    .ticket-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--r);
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: .8rem;
+      position: relative;
+    }
+    .ticket-drop:hover { border-color: var(--accent); color: var(--accent); }
+    .ticket-drop input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .ticket-preview { max-width: 100%; max-height: 220px; object-fit: contain; border-radius: var(--rs); margin: .75rem auto; display: none; }
+    .fiscal-badge {
+      display: inline-block;
+      font-family: 'DM Mono', monospace;
+      font-size: .62rem;
+      padding: .1rem .42rem;
+      border-radius: 10px;
+      margin-left: .35rem;
+      vertical-align: middle;
+    }
+    .fb-igic { background: rgba(111,207,151,.15); color: var(--green); }
+    .fb-irpf { background: rgba(235,87,87,.15);  color: var(--red); }
+
     /* ── PRINT ──────────────────────────────────────── */
     @media print {
       body * { visibility: hidden !important; }
@@ -560,6 +644,7 @@
   <nav class="tabs">
     <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn" data-tab="facturas">Facturas</button>
+    <button class="tab-btn" data-tab="hacienda">Hacienda</button>
   </nav>
 </header>
 
@@ -624,6 +709,52 @@
 
           <!-- Gasto -->
           <div id="gastoFields" style="display:none">
+            <!-- Tipo de gasto + botón escanear -->
+            <div style="display:flex;gap:.45rem;align-items:flex-end;margin-bottom:.9rem">
+              <div class="form-group" style="flex:1;margin:0">
+                <label>Tipo de gasto</label>
+                <select id="movTipoGasto" onchange="onTipoGastoChange()">
+                  <option value="">Sin tipo</option>
+                  <option value="gasolina">⛽ Gasolina / Combustible</option>
+                  <option value="herramientas">🔧 Herramientas y equipos</option>
+                  <option value="comidas">🍽️ Comidas / Restauración</option>
+                  <option value="materiales">📦 Materiales y papelería</option>
+                  <option value="software">💻 Software / Suscripciones</option>
+                  <option value="transporte">🚗 Transporte / Viaje</option>
+                  <option value="publicidad">📢 Publicidad / Marketing</option>
+                  <option value="autonomo">📄 Factura autónomo</option>
+                  <option value="otros">Otros gastos</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openTicketScanner()" style="flex-shrink:0;height:36px">📷 Escanear</button>
+            </div>
+            <!-- Proveedor -->
+            <div class="form-group">
+              <label>Proveedor (opcional)</label>
+              <input type="text" id="movProveedor" placeholder="Nombre del proveedor / emisor">
+            </div>
+            <!-- IGIC -->
+            <div class="form-row">
+              <div class="form-group">
+                <label>IGIC (7%)</label>
+                <select id="movIgicSel" onchange="onIgicSelChange()">
+                  <option value="0">Sin IGIC</option>
+                  <option value="auto">Calcular automático (7%)</option>
+                  <option value="manual">Introducir importe</option>
+                </select>
+              </div>
+              <div class="form-group" id="movIgicAmtGroup" style="display:none">
+                <label>Importe IGIC (€)</label>
+                <input type="number" id="movIgicAmt" step="0.01" min="0" placeholder="0.00">
+              </div>
+            </div>
+            <!-- IRPF retención — solo facturas autónomo -->
+            <div class="form-group" id="movIrpfGroup" style="display:none">
+              <label>IRPF retención (€) — Modelo 111</label>
+              <input type="number" id="movIrpfAmt" step="0.01" min="0" placeholder="0.00">
+              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-family:'DM Mono',monospace">15% de la base · Ej: base 1.000€ → retención 150€</div>
+            </div>
+            <!-- Bloque + Categoría Supabase -->
             <div class="form-row">
               <div class="form-group">
                 <label>Bloque</label>
@@ -749,6 +880,68 @@
     </div>
 
     <div id="factList"><div class="loading">Cargando facturas...</div></div>
+
+  </section>
+
+  <!-- ═══════════════ HACIENDA ═══════════════ -->
+  <section class="tab-pane" id="tab-hacienda">
+
+    <div class="q-nav">
+      <button class="month-nav" id="prevQ" style="width:34px;height:34px;border-radius:50%">&#8592;</button>
+      <div class="q-display" id="qDisplay">—</div>
+      <button class="month-nav" id="nextQ" style="width:34px;height:34px;border-radius:50%">&#8594;</button>
+      <button class="btn btn-ghost btn-sm" onclick="openTicketScanner()" style="margin-left:.5rem">📷 Subir ticket</button>
+    </div>
+
+    <div class="hac-grid">
+
+      <!-- Modelo 420 IGIC -->
+      <div class="card">
+        <div class="card-title">Modelo 420 — IGIC</div>
+        <div class="fiscal-line">
+          <span class="fl">IGIC repercutido (facturas emitidas)</span>
+          <span class="fv pos" id="hacIgicRep">—</span>
+        </div>
+        <div class="fiscal-line">
+          <span class="fl">IGIC soportado (gastos con IGIC)</span>
+          <span class="fv" id="hacIgicSop">—</span>
+        </div>
+        <div class="fiscal-line fiscal-total">
+          <span class="fl" id="hacIgicLabel">RESULTADO</span>
+          <span class="fv" id="hacIgicNeto">—</span>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);margin-top:.75rem">
+          Liquidación trimestral: repercutido − soportado
+        </div>
+      </div>
+
+      <!-- Modelo 111 IRPF -->
+      <div class="card">
+        <div class="card-title">Modelo 111 — Retenciones IRPF</div>
+        <div class="fiscal-line">
+          <span class="fl">Retenciones a autónomos registradas</span>
+          <span class="fv" id="hacIrpfFacturas">—</span>
+        </div>
+        <div class="fiscal-line">
+          <span class="fl">Facturas autónomo este trimestre</span>
+          <span class="fv" id="hacAutoCount">— facturas</span>
+        </div>
+        <div class="fiscal-line fiscal-total">
+          <span class="fl">A INGRESAR Mod. 111</span>
+          <span class="fv fv-pagar" id="hacIrpf111">—</span>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);margin-top:.75rem">
+          Retenciones sobre facturas de trabajadores autónomos
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Detalle gastos con IGIC / IRPF -->
+    <div class="card">
+      <div class="card-title">Gastos con IGIC o retención IRPF este trimestre</div>
+      <div id="hacGastosList"><div class="loading">Carga el trimestre para ver el detalle</div></div>
+    </div>
 
   </section>
 
@@ -904,6 +1097,44 @@
   </div>
 </div>
 
+<!-- ═══════════════ MODAL: TICKET SCANNER ═══════════════ -->
+<div class="overlay hidden" id="overlayTicket">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">📷 Analizar ticket con IA</div>
+      <button class="modal-close" data-close="overlayTicket">&times;</button>
+    </div>
+
+    <!-- API Key -->
+    <div class="form-group" id="apiKeyGroup">
+      <label>API Key Anthropic <span style="color:var(--muted);font-size:.7em">(se guarda en tu dispositivo)</span></label>
+      <input type="password" id="ticketApiKey" placeholder="sk-ant-..." autocomplete="off">
+      <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-family:'DM Mono',monospace">
+        Consigue tu API key en <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>
+      </div>
+    </div>
+
+    <!-- Zona de subida -->
+    <div class="ticket-drop" id="ticketDrop">
+      <div>📷 Haz clic o arrastra la foto del ticket aquí</div>
+      <div style="margin-top:.4rem;font-size:.72rem">JPG, PNG, HEIC — foto con el móvil o cámara</div>
+      <input type="file" id="ticketFile" accept="image/*" capture="environment" onchange="onTicketFile(this)">
+    </div>
+    <img id="ticketPreview" class="ticket-preview" alt="preview">
+
+    <!-- Resultado extraído -->
+    <div id="ticketResult" style="display:none">
+      <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.1em">Datos extraídos</div>
+      <div style="background:var(--bg3);border-radius:var(--rs);padding:.9rem 1rem" id="ticketResultContent"></div>
+    </div>
+
+    <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn btn-primary btn-full" id="btnAnalizar" onclick="analyzeTicket()">Analizar con IA</button>
+      <button class="btn btn-ghost" id="btnAplicar" style="display:none" onclick="applyExtracted()">Aplicar al formulario →</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -991,6 +1222,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     $('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'facturas') loadFacturas();
+    if (btn.dataset.tab === 'hacienda') { updateQDisplay(); loadHacienda(); }
   });
 });
 
@@ -1179,12 +1411,15 @@ function renderMovList(movs) {
   const ul = $('movList');
   if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
   movs.forEach(m => _movCache[m.id] = m);
-  ul.innerHTML = movs.map(m => `
+  ul.innerHTML = movs.map(m => {
+    const { desc: mDesc, fiscal } = decGasto(m.descripcion);
+    const badges = m.tipo === 'gasto' ? fiscalBadges(fiscal) : '';
+    return `
     <li class="mov-item">
       <div style="flex:1;min-width:0">
-        <div class="mov-desc">${m.descripcion || '—'}</div>
+        <div class="mov-desc">${mDesc || '—'}${badges}</div>
         <div class="mov-meta">
-          ${fmtD(m.fecha)}${m.clientes ? ' · ' + m.clientes.nombre : ''}${m.categorias ? ' · ' + m.categorias.nombre : ''}${m.bloque ? ' · ' + m.bloque : ''}
+          ${fmtD(m.fecha)}${m.clientes ? ' · ' + m.clientes.nombre : ''}${m.categorias ? ' · ' + m.categorias.nombre : ''}${m.bloque ? ' · ' + m.bloque : ''}${fiscal.prov ? ' · ' + fiscal.prov : ''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
@@ -1192,7 +1427,7 @@ function renderMovList(movs) {
         <button class="btn-icon" onclick="openEditMov('${m.id}')" title="Editar">✏️</button>
       </div>
     </li>
-  `).join('');
+  `}).join('');
 }
 
 /* ════════════════════════════════════════════════════
@@ -1201,11 +1436,12 @@ function renderMovList(movs) {
 function openEditMov(id) {
   const m = _movCache[id];
   if (!m) { toast('No se pudo cargar el movimiento', true); return; }
+  const { desc: mDescEdit, fiscal: mFiscalEdit } = decGasto(m.descripcion);
   $('editMovId').value      = m.id;
   $('editMovTipo').value    = m.tipo;
   $('editMovFecha').value   = m.fecha;
   $('editMovImporte').value = m.importe;
-  $('editMovDesc').value    = m.descripcion || '';
+  $('editMovDesc').value    = mDescEdit || '';
 
   const isIngreso = m.tipo === 'ingreso';
   $('editIngresoFields').style.display = isIngreso ? '' : 'none';
@@ -1234,10 +1470,15 @@ function openEditMov(id) {
 async function saveEditMov() {
   const id     = $('editMovId').value;
   const tipo   = $('editMovTipo').value;
+  // Recuperar los datos fiscales originales del movimiento en caché
+  const origFiscal = decGasto(_movCache[id]?.descripcion).fiscal;
+  const descLimpia = $('editMovDesc').value.trim();
+  const descFinal  = encGasto(descLimpia, origFiscal);
+
   const update = {
     fecha:       $('editMovFecha').value,
     importe:     parseFloat($('editMovImporte').value),
-    descripcion: $('editMovDesc').value.trim(),
+    descripcion: descFinal,
   };
   if (tipo === 'ingreso') {
     const cId = $('editMovCliente').value;
@@ -1389,16 +1630,19 @@ $('movForm').addEventListener('submit', async e => {
     if (catId) mov.categoria_id = catId;
     const gCId = $('movGastoCliente').value;
     if (gCId && !gCId.startsWith('seed_')) mov.cliente_id = gCId;
-    // Si es seed, añadimos el nombre a la descripción para que quede registrado
     if (gCId && gCId.startsWith('seed_')) {
       const cli = clis.find(c => c.id === gCId);
       if (cli) mov.descripcion = mov.descripcion + ' [' + cli.nombre + ']';
     }
+    // Datos fiscales: codificar en descripción
+    const fiscal = getFiscalFromForm();
+    mov.descripcion = encGasto(mov.descripcion, fiscal);
   }
   const { error } = await db.from('movimientos').insert(mov);
   if (error) { toast('Error: ' + error.message, true); return; }
   $('movImporte').value = '';
   $('movDesc').value = '';
+  clearGastoFiscalForm();
   toast('Movimiento guardado ✓');
   loadDashboard();
 });
@@ -1827,10 +2071,327 @@ async function showPreview(id) {
 $('btnPrint').addEventListener('click', () => window.print());
 
 /* ════════════════════════════════════════════════════
+   FISCAL DATA ENCODING IN DESCRIPTION
+   Format: "texto usuario||{"t":"gasolina","igic":5.6,"irpf":0,"prov":"BP"}"
+════════════════════════════════════════════════════ */
+function encGasto(desc, fiscal) {
+  const { t = '', igic = 0, irpf = 0, prov = '' } = fiscal;
+  if (!t && !igic && !irpf && !prov) return desc;
+  return desc + '||' + JSON.stringify({ t, igic: +igic.toFixed(2), irpf: +irpf.toFixed(2), prov });
+}
+
+function decGasto(raw) {
+  if (!raw) return { desc: '', fiscal: { t: '', igic: 0, irpf: 0, prov: '' } };
+  const idx = raw.indexOf('||');
+  if (idx === -1) return { desc: raw, fiscal: { t: '', igic: 0, irpf: 0, prov: '' } };
+  const desc = raw.slice(0, idx);
+  let fiscal = { t: '', igic: 0, irpf: 0, prov: '' };
+  try { fiscal = { ...fiscal, ...JSON.parse(raw.slice(idx + 2)) }; } catch(e) {}
+  return { desc, fiscal };
+}
+
+function fiscalBadges(fiscal) {
+  let b = '';
+  if (fiscal.igic > 0) b += `<span class="fiscal-badge fb-igic">IGIC ${fmt(fiscal.igic)}</span>`;
+  if (fiscal.irpf > 0) b += `<span class="fiscal-badge fb-irpf">IRPF ${fmt(fiscal.irpf)}</span>`;
+  return b;
+}
+
+/* ════════════════════════════════════════════════════
+   GASTO FORM HELPERS
+════════════════════════════════════════════════════ */
+function onTipoGastoChange() {
+  const tipo = $('movTipoGasto').value;
+  const showIrpf = tipo === 'autonomo';
+  if ($('movIrpfGroup')) $('movIrpfGroup').style.display = showIrpf ? '' : 'none';
+  if (!showIrpf && $('movIrpfAmt')) $('movIrpfAmt').value = '';
+}
+
+function onIgicSelChange() {
+  const sel = $('movIgicSel').value;
+  const grp = $('movIgicAmtGroup');
+  if (grp) grp.style.display = sel === 'manual' ? '' : 'none';
+  if (sel !== 'manual' && $('movIgicAmt')) $('movIgicAmt').value = '';
+}
+
+function getFiscalFromForm() {
+  const tipo = $('movTipoGasto')?.value || '';
+  const prov = $('movProveedor')?.value.trim() || '';
+  const igicSel = $('movIgicSel')?.value || '0';
+  const importe = parseFloat($('movImporte')?.value) || 0;
+  let igic = 0;
+  if (igicSel === 'auto')   igic = +(importe * 7 / 107).toFixed(2);
+  else if (igicSel === 'manual') igic = parseFloat($('movIgicAmt')?.value) || 0;
+  const irpf = parseFloat($('movIrpfAmt')?.value) || 0;
+  return { t: tipo, igic, irpf, prov };
+}
+
+function clearGastoFiscalForm() {
+  if ($('movTipoGasto'))     $('movTipoGasto').value = '';
+  if ($('movProveedor'))     $('movProveedor').value = '';
+  if ($('movIgicSel'))       $('movIgicSel').value = '0';
+  if ($('movIgicAmtGroup'))  $('movIgicAmtGroup').style.display = 'none';
+  if ($('movIgicAmt'))       $('movIgicAmt').value = '';
+  if ($('movIrpfGroup'))     $('movIrpfGroup').style.display = 'none';
+  if ($('movIrpfAmt'))       $('movIrpfAmt').value = '';
+}
+
+/* ════════════════════════════════════════════════════
+   HACIENDA — QUARTER NAV
+════════════════════════════════════════════════════ */
+let hacYear    = new Date().getFullYear();
+let hacQuarter = Math.floor(new Date().getMonth() / 3) + 1;
+
+function getQuarterDates(year, q) {
+  const startMonth = (q - 1) * 3;   // 0,3,6,9
+  const endMonth   = startMonth + 2; // 2,5,8,11
+  const lastDay    = new Date(year, endMonth + 1, 0).getDate();
+  const pad = n => String(n + 1).padStart(2, '0');
+  return {
+    from: `${year}-${pad(startMonth)}-01`,
+    to:   `${year}-${pad(endMonth)}-${lastDay}`,
+  };
+}
+
+function updateQDisplay() {
+  if ($('qDisplay')) $('qDisplay').textContent = `T${hacQuarter} · ${hacYear}`;
+}
+
+$('prevQ').addEventListener('click', () => {
+  if (hacQuarter === 1) { hacQuarter = 4; hacYear--; } else hacQuarter--;
+  updateQDisplay(); loadHacienda();
+});
+$('nextQ').addEventListener('click', () => {
+  if (hacQuarter === 4) { hacQuarter = 1; hacYear++; } else hacQuarter++;
+  updateQDisplay(); loadHacienda();
+});
+
+async function loadHacienda() {
+  const { from, to } = getQuarterDates(hacYear, hacQuarter);
+
+  // IGIC repercutido: facturas emitidas en el trimestre
+  const { data: facts } = await db.from('facturas')
+    .select('base_imponible, iva_pct, fecha')
+    .gte('fecha', from).lte('fecha', to);
+
+  const igicRep = (facts || []).reduce((s, f) =>
+    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+
+  // Gastos del trimestre: extraer IGIC soportado e IRPF retenciones
+  const { data: movs } = await db.from('movimientos')
+    .select('descripcion, importe, fecha')
+    .eq('tipo', 'gasto')
+    .gte('fecha', from).lte('fecha', to);
+
+  let igicSop = 0, irpfTotal = 0, autoCount = 0;
+  const fiscalMovs = [];
+
+  (movs || []).forEach(m => {
+    const { desc, fiscal } = decGasto(m.descripcion);
+    if (fiscal.igic > 0 || fiscal.irpf > 0 || fiscal.t === 'autonomo') {
+      fiscalMovs.push({ ...m, descLeg: desc, fiscal });
+    }
+    igicSop   += fiscal.igic || 0;
+    irpfTotal += fiscal.irpf || 0;
+    if (fiscal.t === 'autonomo') autoCount++;
+  });
+
+  const igicNeto = igicRep - igicSop;
+
+  // Actualizar UI modelo 420
+  $('hacIgicRep').textContent  = fmt(igicRep);
+  $('hacIgicSop').textContent  = fmt(igicSop);
+  $('hacIgicNeto').textContent = fmt(Math.abs(igicNeto));
+  $('hacIgicNeto').className   = 'fv ' + (igicNeto >= 0 ? 'fv-pagar' : 'fv-dev');
+  $('hacIgicLabel').textContent = igicNeto >= 0 ? 'A PAGAR (Mod. 420)' : 'A DEVOLVER (Mod. 420)';
+
+  // Actualizar UI modelo 111
+  $('hacIrpfFacturas').textContent = fmt(irpfTotal);
+  $('hacAutoCount').textContent    = autoCount + ' factura' + (autoCount !== 1 ? 's' : '');
+  $('hacIrpf111').textContent      = fmt(irpfTotal);
+
+  // Detalle de gastos con datos fiscales
+  const listEl = $('hacGastosList');
+  if (!fiscalMovs.length) {
+    listEl.innerHTML = '<div class="empty">Sin gastos con IGIC o retención IRPF este trimestre</div>';
+    return;
+  }
+  listEl.innerHTML = fiscalMovs.map(m => `
+    <div class="hac-detail-item">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.86rem">${m.descLeg || '—'}${m.fiscal.prov ? ` <span style="color:var(--muted);font-size:.76rem">· ${m.fiscal.prov}</span>` : ''}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:.15rem">
+          ${fmtD(m.fecha)}${m.fiscal.t ? ' · ' + m.fiscal.t : ''}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'DM Mono',monospace;font-size:.88rem;color:var(--red)">−${fmt(m.importe)}</div>
+        ${fiscalBadges(m.fiscal)}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   TICKET SCANNER — ANTHROPIC VISION
+════════════════════════════════════════════════════ */
+let _extractedTicket = null;
+
+function openTicketScanner() {
+  _extractedTicket = null;
+  if ($('ticketApiKey')) {
+    const saved = localStorage.getItem('anthropic_key') || '';
+    $('ticketApiKey').value = saved;
+  }
+  if ($('ticketPreview'))      $('ticketPreview').style.display = 'none';
+  if ($('ticketResult'))       $('ticketResult').style.display = 'none';
+  if ($('btnAplicar'))         $('btnAplicar').style.display = 'none';
+  if ($('ticketFile'))         $('ticketFile').value = '';
+  openM('overlayTicket');
+}
+
+function onTicketFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const prev = $('ticketPreview');
+  if (prev) {
+    prev.src = URL.createObjectURL(file);
+    prev.style.display = 'block';
+  }
+  if ($('ticketResult')) $('ticketResult').style.display = 'none';
+  if ($('btnAplicar'))   $('btnAplicar').style.display = 'none';
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function analyzeTicket() {
+  const apiKey = ($('ticketApiKey')?.value || '').trim() || localStorage.getItem('anthropic_key') || '';
+  if (!apiKey) { toast('Introduce tu API Key de Anthropic primero', true); return; }
+  localStorage.setItem('anthropic_key', apiKey);
+
+  const file = $('ticketFile')?.files[0];
+  if (!file) { toast('Selecciona una foto del ticket', true); return; }
+
+  const btn = $('btnAnalizar');
+  btn.disabled = true;
+  btn.textContent = 'Analizando…';
+
+  try {
+    const b64 = await fileToBase64(file);
+    const mediaType = file.type || 'image/jpeg';
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 512,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+            { type: 'text', text: `Analiza este ticket o factura y extrae los datos exactos. Responde ÚNICAMENTE con JSON válido, sin texto adicional:
+{
+  "importe_total": <número decimal, ej: 45.80>,
+  "fecha": "<YYYY-MM-DD o null>",
+  "descripcion": "<texto breve descriptivo del gasto, ej: Gasolina BP>",
+  "tipo": "<una de: gasolina|herramientas|comidas|materiales|software|transporte|publicidad|autonomo|otros>",
+  "proveedor": "<nombre del comercio o empresa emisora>",
+  "igic": <importe IGIC si aparece explícitamente, si no 0>,
+  "irpf": <importe IRPF si aparece explícitamente, si no 0>
+}` }
+          ],
+        }],
+      }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || `Error ${resp.status}`);
+
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No se pudo interpretar la respuesta');
+
+    _extractedTicket = JSON.parse(match[0]);
+    showExtractedResult(_extractedTicket);
+
+  } catch(err) {
+    toast('Error: ' + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analizar con IA';
+  }
+}
+
+function showExtractedResult(d) {
+  const el = $('ticketResultContent');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-family:'DM Mono',monospace;font-size:.78rem">
+      <div><span style="color:var(--muted)">Importe:</span> <strong style="color:var(--green)">${d.importe_total ? fmt(d.importe_total) : '—'}</strong></div>
+      <div><span style="color:var(--muted)">Fecha:</span> ${d.fecha ? fmtD(d.fecha) : '—'}</div>
+      <div><span style="color:var(--muted)">Tipo:</span> ${d.tipo || '—'}</div>
+      <div><span style="color:var(--muted)">Proveedor:</span> ${d.proveedor || '—'}</div>
+      <div><span style="color:var(--muted)">IGIC:</span> ${d.igic ? fmt(d.igic) : '0,00 €'}</div>
+      <div><span style="color:var(--muted)">IRPF:</span> ${d.irpf ? fmt(d.irpf) : '0,00 €'}</div>
+    </div>
+    <div style="margin-top:.5rem;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted)">Descripción: <span style="color:var(--text)">${d.descripcion || '—'}</span></div>
+  `;
+  $('ticketResult').style.display = '';
+  $('btnAplicar').style.display = '';
+}
+
+function applyExtracted() {
+  if (!_extractedTicket) return;
+  const d = _extractedTicket;
+
+  // Cambiar a gasto si no lo está
+  if (movTipo !== 'gasto') document.querySelector('.type-btn.gasto').click();
+
+  if (d.importe_total) $('movImporte').value = d.importe_total;
+  if (d.fecha)         $('movFecha').value = d.fecha;
+  if (d.descripcion)   $('movDesc').value = d.descripcion;
+  if (d.tipo && $('movTipoGasto'))    { $('movTipoGasto').value = d.tipo; onTipoGastoChange(); }
+  if (d.proveedor && $('movProveedor')) $('movProveedor').value = d.proveedor;
+
+  if (d.igic > 0 && $('movIgicSel')) {
+    $('movIgicSel').value = 'manual';
+    onIgicSelChange();
+    $('movIgicAmt').value = d.igic;
+  }
+  if (d.irpf > 0 && $('movIrpfAmt')) {
+    if ($('movIrpfGroup')) $('movIrpfGroup').style.display = '';
+    $('movIrpfAmt').value = d.irpf;
+  }
+
+  // Bloque empresa por defecto para gastos de empresa
+  if ($('movBloque')) $('movBloque').value = 'empresa';
+
+  closeM('overlayTicket');
+  toast('Datos del ticket aplicados ✓ — revisa y guarda');
+
+  // Scroll al formulario
+  document.querySelector('#movForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════ */
 async function init() {
   updateMonthDisplay();
+  updateQDisplay();
   await Promise.all([loadCats(), loadClis()]);
   await loadDashboard();
 }
