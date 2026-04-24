@@ -807,9 +807,16 @@
 
       <!-- MOVEMENTS LIST -->
       <div class="card">
-        <div class="card-title">Movimientos del mes</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)">
+          <div class="card-title" style="margin:0">Movimientos del mes</div>
+          <div id="movSummary" style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);text-align:right"></div>
+        </div>
         <div class="scroll">
           <ul class="mov-list" id="movList"><li class="loading">Cargando...</li></ul>
+        </div>
+        <div id="movTotals" style="display:none;padding-top:.75rem;border-top:1px solid var(--border);margin-top:.5rem;display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:.78rem">
+          <span style="color:var(--green)" id="movTotalIng"></span>
+          <span style="color:var(--red)"   id="movTotalGas"></span>
         </div>
       </div>
 
@@ -860,17 +867,29 @@
   <!-- ═══════════════ FACTURAS ═══════════════ -->
   <section class="tab-pane" id="tab-facturas">
 
+    <!-- Selector de año -->
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--sand)">Resumen</div>
+      <select id="factYearSel" style="width:auto;min-width:90px" onchange="loadFacturas()">
+      </select>
+      <span style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted)">— solo año seleccionado</span>
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi-card">
-        <div class="kpi-label">Total facturado</div>
-        <div class="kpi-value acc" id="fKpiTotal">—</div>
+        <div class="kpi-label">Base facturada (sin impuestos)</div>
+        <div class="kpi-value acc" id="fKpiBase">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total a percibir (base+IGIC−IRPF)</div>
+        <div class="kpi-value pos" id="fKpiTotal">—</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Cobrado</div>
         <div class="kpi-value pos" id="fKpiCobrado">—</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Pendiente</div>
+        <div class="kpi-label">Pendiente de cobro</div>
         <div class="kpi-value warn" id="fKpiPend">—</div>
       </div>
     </div>
@@ -1217,7 +1236,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     $('tab-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'facturas') loadFacturas();
+    if (btn.dataset.tab === 'facturas') { initFactYearSel(); loadFacturas(); }
     if (btn.dataset.tab === 'hacienda') { updateQDisplay(); loadHacienda(); }
   });
 });
@@ -1405,6 +1424,19 @@ async function loadDashboard() {
 const _movCache = {};
 function renderMovList(movs) {
   const ul = $('movList');
+
+  // Resumen de totales
+  const ingrTot = movs.filter(m => m.tipo === 'ingreso').reduce((s,m) => s+(m.importe||0), 0);
+  const gastTot = movs.filter(m => m.tipo === 'gasto').reduce((s,m)  => s+(m.importe||0), 0);
+  const nIng = movs.filter(m => m.tipo === 'ingreso').length;
+  const nGas = movs.filter(m => m.tipo === 'gasto').length;
+  if ($('movSummary')) $('movSummary').innerHTML =
+    `<span style="color:var(--green)">${nIng} ingreso${nIng!==1?'s':''}</span>&nbsp;&nbsp;<span style="color:var(--red)">${nGas} gasto${nGas!==1?'s':''}</span>`;
+  if ($('movTotalIng')) $('movTotalIng').textContent = nIng ? '+' + fmt(ingrTot) : '';
+  if ($('movTotalGas')) $('movTotalGas').textContent = nGas ? '−' + fmt(gastTot) : '';
+  const totBar = $('movTotals');
+  if (totBar) totBar.style.display = movs.length ? 'flex' : 'none';
+
   if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
   movs.forEach(m => _movCache[m.id] = m);
   ul.innerHTML = movs.map(m => {
@@ -1567,14 +1599,27 @@ function renderBreakdowns(ingresos, gastos) {
   // Extraer cliente: del join Supabase, o del patrón "FAC-XXXX · NombreCliente · ..."
   const byClient  = groupBy(ingresos, m => {
     if (m.clientes?.nombre) return m.clientes.nombre;
-    const parts = (m.descripcion || '').split(' · ');
+    const { desc: d } = decGasto(m.descripcion);
+    const parts = d.split(' · ');
     return parts.length >= 2 ? parts[1] : 'Sin cliente';
   });
-  const byEmpresa = groupBy(gastos.filter(m => m.bloque === 'empresa'), m => m.categorias?.nombre || 'Sin categoría');
-  const byPersonal= groupBy(gastos.filter(m => m.bloque === 'personal'), m => m.categorias?.nombre || 'Sin categoría');
+  // Gastos: usa categoría Supabase si hay; si no, tipo_gasto de la descripción codificada
+  const TIPO_LABEL = {
+    gasolina:'⛽ Gasolina', herramientas:'🔧 Herramientas', comidas:'🍽️ Comidas',
+    materiales:'📦 Materiales', software:'💻 Software', transporte:'🚗 Transporte',
+    publicidad:'📢 Publicidad', autonomo:'📄 Autónomo', otros:'Otros',
+  };
+  const gastoKey = m => {
+    if (m.categorias?.nombre) return m.categorias.nombre;
+    const { fiscal } = decGasto(m.descripcion);
+    return fiscal.t ? (TIPO_LABEL[fiscal.t] || fiscal.t) : 'Sin categoría';
+  };
 
-  renderBars('barIng', byClient, 'ingreso');
-  renderBars('barEmp', byEmpresa, 'empresa');
+  const byEmpresa  = groupBy(gastos.filter(m => m.bloque === 'empresa'),  gastoKey);
+  const byPersonal = groupBy(gastos.filter(m => m.bloque === 'personal'), gastoKey);
+
+  renderBars('barIng', byClient,   'ingreso');
+  renderBars('barEmp', byEmpresa,  'empresa');
   renderBars('barPer', byPersonal, 'personal');
 }
 
@@ -1647,21 +1692,43 @@ $('movForm').addEventListener('submit', async e => {
    FACTURAS — LIST
 ════════════════════════════════════════════════════ */
 const _factCache = {};
+
+function initFactYearSel() {
+  const sel = $('factYearSel');
+  if (!sel) return;
+  const cur = new Date().getFullYear();
+  sel.innerHTML = [cur, cur-1, cur-2].map(y =>
+    `<option value="${y}"${y === cur ? ' selected' : ''}>${y}</option>`
+  ).join('') + '<option value="all">Todos</option>';
+}
+
 async function loadFacturas() {
-  const { data, error } = await db.from('facturas').select('*').order('created_at', { ascending: false });
+  const yearSel = $('factYearSel')?.value || String(new Date().getFullYear());
+
+  let q = db.from('facturas').select('*').order('fecha', { ascending: false });
+  if (yearSel !== 'all') {
+    q = q.gte('fecha', `${yearSel}-01-01`).lte('fecha', `${yearSel}-12-31`);
+  }
+  const { data, error } = await q;
   if (error) { toast('Error cargando facturas', true); return; }
   data.forEach(f => _factCache[f.id] = f);
 
+  // KPIs: base imponible, total a percibir, cobrado, pendiente
+  const base    = data.reduce((s, f) => s + (f.base_imponible || 0), 0);
   const total   = data.reduce((s, f) => s + (f.total || 0), 0);
   const cobrado = data.filter(f => f.estado === 'pagada').reduce((s, f) => s + (f.total || 0), 0);
   const pend    = data.filter(f => f.estado === 'pendiente').reduce((s, f) => s + (f.total || 0), 0);
 
-  $('fKpiTotal').textContent  = fmt(total);
+  $('fKpiBase').textContent    = fmt(base);
+  $('fKpiTotal').textContent   = fmt(total);
   $('fKpiCobrado').textContent = fmt(cobrado);
-  $('fKpiPend').textContent   = fmt(pend);
+  $('fKpiPend').textContent    = fmt(pend);
 
   const container = $('factList');
-  if (!data.length) { container.innerHTML = '<div class="empty">Sin facturas todavía</div>'; return; }
+  if (!data.length) {
+    container.innerHTML = '<div class="empty">Sin facturas en ' + (yearSel === 'all' ? 'toda la historia' : yearSel) + '</div>';
+    return;
+  }
 
   container.innerHTML = data.map(f => `
     <div class="inv-item" data-id="${f.id}">
@@ -1672,6 +1739,7 @@ async function loadFacturas() {
       </div>
       <div class="inv-right" style="align-items:flex-end;gap:.4rem">
         <div class="inv-total">${fmt(f.total)}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted)">base ${fmt(f.base_imponible || 0)}</div>
         <span class="badge badge-${f.estado}">${f.estado}</span>
         ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
         <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
@@ -2397,6 +2465,7 @@ function applyExtracted() {
 async function init() {
   updateMonthDisplay();
   updateQDisplay();
+  initFactYearSel();
   await Promise.all([loadCats(), loadClis()]);
   await loadDashboard();
 }
