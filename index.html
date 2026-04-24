@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1101,36 +1102,31 @@
 <div class="overlay hidden" id="overlayTicket">
   <div class="modal">
     <div class="modal-head">
-      <div class="modal-title">📷 Analizar ticket con IA</div>
+      <div class="modal-title">📷 Subir ticket de gasto</div>
       <button class="modal-close" data-close="overlayTicket">&times;</button>
-    </div>
-
-    <!-- API Key -->
-    <div class="form-group" id="apiKeyGroup">
-      <label>API Key Anthropic <span style="color:var(--muted);font-size:.7em">(se guarda en tu dispositivo)</span></label>
-      <input type="password" id="ticketApiKey" placeholder="sk-ant-..." autocomplete="off">
-      <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-family:'DM Mono',monospace">
-        Consigue tu API key en <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>
-      </div>
     </div>
 
     <!-- Zona de subida -->
     <div class="ticket-drop" id="ticketDrop">
-      <div>📷 Haz clic o arrastra la foto del ticket aquí</div>
-      <div style="margin-top:.4rem;font-size:.72rem">JPG, PNG, HEIC — foto con el móvil o cámara</div>
-      <input type="file" id="ticketFile" accept="image/*" capture="environment" onchange="onTicketFile(this)">
+      <div style="font-size:1.5rem;margin-bottom:.35rem">📷</div>
+      <div style="font-weight:500">Haz clic para seleccionar la foto del ticket</div>
+      <div style="margin-top:.4rem;font-size:.72rem;color:var(--muted)">JPG · PNG · HEIC · desde cámara o galería</div>
+      <input type="file" id="ticketFile" accept="image/*" onchange="onTicketFile(this)">
     </div>
     <img id="ticketPreview" class="ticket-preview" alt="preview">
 
+    <!-- Progreso OCR -->
+    <div id="ticketProgress" style="display:none;font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted);text-align:center;padding:.5rem 0"></div>
+
     <!-- Resultado extraído -->
     <div id="ticketResult" style="display:none">
-      <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.1em">Datos extraídos</div>
+      <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.1em">Datos detectados — revisa y corrige si es necesario</div>
       <div style="background:var(--bg3);border-radius:var(--rs);padding:.9rem 1rem" id="ticketResultContent"></div>
     </div>
 
     <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
-      <button class="btn btn-primary btn-full" id="btnAnalizar" onclick="analyzeTicket()">Analizar con IA</button>
-      <button class="btn btn-ghost" id="btnAplicar" style="display:none" onclick="applyExtracted()">Aplicar al formulario →</button>
+      <button class="btn btn-primary btn-full" id="btnAnalizar" onclick="analyzeTicket()">🔍 Leer ticket</button>
+      <button class="btn btn-ghost btn-full" id="btnAplicar" style="display:none" onclick="applyExtracted()">✓ Aplicar al formulario</button>
     </div>
   </div>
 </div>
@@ -2233,20 +2229,17 @@ async function loadHacienda() {
 }
 
 /* ════════════════════════════════════════════════════
-   TICKET SCANNER — ANTHROPIC VISION
+   TICKET SCANNER — OCR con Tesseract.js (sin API key)
 ════════════════════════════════════════════════════ */
 let _extractedTicket = null;
 
 function openTicketScanner() {
   _extractedTicket = null;
-  if ($('ticketApiKey')) {
-    const saved = localStorage.getItem('anthropic_key') || '';
-    $('ticketApiKey').value = saved;
-  }
-  if ($('ticketPreview'))      $('ticketPreview').style.display = 'none';
-  if ($('ticketResult'))       $('ticketResult').style.display = 'none';
-  if ($('btnAplicar'))         $('btnAplicar').style.display = 'none';
-  if ($('ticketFile'))         $('ticketFile').value = '';
+  if ($('ticketPreview'))   $('ticketPreview').style.display = 'none';
+  if ($('ticketResult'))    $('ticketResult').style.display = 'none';
+  if ($('ticketProgress'))  $('ticketProgress').style.display = 'none';
+  if ($('btnAplicar'))      $('btnAplicar').style.display = 'none';
+  if ($('ticketFile'))      $('ticketFile').value = '';
   openM('overlayTicket');
 }
 
@@ -2254,84 +2247,96 @@ function onTicketFile(input) {
   const file = input.files[0];
   if (!file) return;
   const prev = $('ticketPreview');
-  if (prev) {
-    prev.src = URL.createObjectURL(file);
-    prev.style.display = 'block';
-  }
-  if ($('ticketResult')) $('ticketResult').style.display = 'none';
-  if ($('btnAplicar'))   $('btnAplicar').style.display = 'none';
+  if (prev) { prev.src = URL.createObjectURL(file); prev.style.display = 'block'; }
+  if ($('ticketResult'))   $('ticketResult').style.display = 'none';
+  if ($('btnAplicar'))     $('btnAplicar').style.display = 'none';
 }
 
-function fileToBase64(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(',')[1]);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
+// ── Parsear texto OCR ──────────────────────────────
+function parseTicketText(raw) {
+  const text = raw || '';
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Importes: todos los patrones de precio en el ticket
+  const amtRx = /(?:total|importe|a\s*pagar|cobrado|pagado)?[:\s]*(\d{1,6}[.,]\d{2})\s*€?/gi;
+  const amounts = [];
+  let m;
+  while ((m = amtRx.exec(text)) !== null) {
+    amounts.push(parseFloat(m[1].replace(',', '.')));
+  }
+  // El importe total suele ser el más grande
+  const importe_total = amounts.length ? Math.max(...amounts) : null;
+
+  // Fecha
+  const dateRx = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/;
+  const dm = text.match(dateRx);
+  let fecha = null;
+  if (dm) {
+    const y = dm[3].length === 2 ? '20' + dm[3] : dm[3];
+    fecha = `${y}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
+  }
+
+  // IGIC
+  const igicM = text.match(/igic[^0-9]*(\d{1,4}[.,]\d{2})/i);
+  const igic = igicM ? parseFloat(igicM[1].replace(',', '.')) : 0;
+
+  // IRPF
+  const irpfM = text.match(/irpf[^0-9]*(\d{1,4}[.,]\d{2})/i);
+  const irpf = irpfM ? parseFloat(irpfM[1].replace(',', '.')) : 0;
+
+  // Categoría por palabras clave
+  const tl = text.toLowerCase();
+  const CATS = [
+    ['gasolina',   ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
+    ['comidas',    ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú','menú del dia','bar ','comida']],
+    ['herramientas',['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
+    ['materiales', ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','material','impresion','toner']],
+    ['software',   ['google','microsoft','apple','adobe','spotify','netflix','suscripci','licencia','cloud','hosting','dominio']],
+    ['transporte', ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte']],
+    ['publicidad', ['meta ads','google ads','publicidad','marketing','imprenta','diseño']],
+  ];
+  let tipo = 'otros';
+  for (const [cat, kws] of CATS) {
+    if (kws.some(k => tl.includes(k))) { tipo = cat; break; }
+  }
+
+  // Proveedor: primera línea no-numérica con texto significativo
+  const proveedor = lines.find(l => l.length >= 3 && !/^[\d\s€.,*\/\-]+$/.test(l)) || '';
+
+  const descripcion = proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo;
+
+  return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf };
 }
 
 async function analyzeTicket() {
-  const apiKey = ($('ticketApiKey')?.value || '').trim() || localStorage.getItem('anthropic_key') || '';
-  if (!apiKey) { toast('Introduce tu API Key de Anthropic primero', true); return; }
-  localStorage.setItem('anthropic_key', apiKey);
-
   const file = $('ticketFile')?.files[0];
-  if (!file) { toast('Selecciona una foto del ticket', true); return; }
+  if (!file) { toast('Primero selecciona una foto del ticket', true); return; }
 
   const btn = $('btnAnalizar');
+  const prog = $('ticketProgress');
   btn.disabled = true;
-  btn.textContent = 'Analizando…';
+  if (prog) { prog.style.display = ''; prog.textContent = 'Cargando lector…'; }
 
   try {
-    const b64 = await fileToBase64(file);
-    const mediaType = file.type || 'image/jpeg';
-
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 512,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
-            { type: 'text', text: `Analiza este ticket o factura y extrae los datos exactos. Responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{
-  "importe_total": <número decimal, ej: 45.80>,
-  "fecha": "<YYYY-MM-DD o null>",
-  "descripcion": "<texto breve descriptivo del gasto, ej: Gasolina BP>",
-  "tipo": "<una de: gasolina|herramientas|comidas|materiales|software|transporte|publicidad|autonomo|otros>",
-  "proveedor": "<nombre del comercio o empresa emisora>",
-  "igic": <importe IGIC si aparece explícitamente, si no 0>,
-  "irpf": <importe IRPF si aparece explícitamente, si no 0>
-}` }
-          ],
-        }],
-      }),
+    const result = await Tesseract.recognize(file, 'spa+eng', {
+      logger: info => {
+        if (prog && info.status === 'recognizing text') {
+          prog.textContent = `Leyendo ticket… ${Math.round((info.progress || 0) * 100)}%`;
+        }
+      }
     });
 
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error?.message || `Error ${resp.status}`);
-
-    const text = data.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No se pudo interpretar la respuesta');
-
-    _extractedTicket = JSON.parse(match[0]);
+    if (prog) prog.style.display = 'none';
+    const texto = result.data.text;
+    _extractedTicket = parseTicketText(texto);
     showExtractedResult(_extractedTicket);
 
   } catch(err) {
-    toast('Error: ' + err.message, true);
+    toast('Error al leer el ticket: ' + err.message, true);
+    if (prog) prog.style.display = 'none';
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Analizar con IA';
+    btn.textContent = '🔍 Leer ticket';
   }
 }
 
