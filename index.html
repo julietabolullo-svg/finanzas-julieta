@@ -959,7 +959,7 @@
 
     <!-- Detalle gastos con IGIC / IRPF -->
     <div class="card">
-      <div class="card-title">Gastos con IGIC o retención IRPF este trimestre</div>
+      <div class="card-title">Detalle fiscal del trimestre</div>
       <div id="hacGastosList"><div class="loading">Carga el trimestre para ver el detalle</div></div>
     </div>
 
@@ -2274,26 +2274,69 @@ async function loadHacienda() {
   $('hacAutoCount').textContent    = autoCount + ' factura' + (autoCount !== 1 ? 's' : '');
   $('hacIrpf111').textContent      = fmt(irpfTotal);
 
-  // Detalle de gastos con datos fiscales
+  // Detalle unificado: facturas emitidas + gastos con fiscal
   const listEl = $('hacGastosList');
-  if (!fiscalMovs.length) {
-    listEl.innerHTML = '<div class="empty">Sin gastos con IGIC o retención IRPF este trimestre</div>';
-    return;
+  let html = '';
+
+  // ── Bloque 1: Facturas emitidas (IGIC repercutido) ──
+  if (facts && facts.length) {
+    // Necesitamos más datos de facturas; hacemos query completa
+    const { data: factsDetail } = await db.from('facturas')
+      .select('numero, fecha, cliente_nombre, base_imponible, iva_pct, irpf_pct, total')
+      .gte('fecha', from).lte('fecha', to)
+      .order('fecha', { ascending: false });
+
+    html += `<div style="font-family:'DM Mono',monospace;font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">
+      📤 Facturas emitidas — IGIC repercutido
+    </div>`;
+
+    html += (factsDetail || []).map(f => {
+      const igicF = (f.base_imponible || 0) * ((f.iva_pct || 7) / 100);
+      const irpfF = (f.base_imponible || 0) * ((f.irpf_pct || 15) / 100);
+      return `<div class="hac-detail-item">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.86rem">${f.numero} · ${f.cliente_nombre}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:.15rem">${fmtD(f.fecha)}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'DM Mono',monospace;font-size:.88rem;color:var(--green)">+${fmt(f.total)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.7rem;margin-top:.2rem">
+            <span style="background:rgba(232,82,26,.15);color:var(--accent);border-radius:4px;padding:1px 6px">IGIC ${fmt(igicF)}</span>
+            <span style="background:rgba(235,87,87,.12);color:var(--red);border-radius:4px;padding:1px 6px;margin-left:4px">IRPF −${fmt(irpfF)}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
   }
-  listEl.innerHTML = fiscalMovs.map(m => `
-    <div class="hac-detail-item">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:.86rem">${m.descLeg || '—'}${m.fiscal.prov ? ` <span style="color:var(--muted);font-size:.76rem">· ${m.fiscal.prov}</span>` : ''}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:.15rem">
-          ${fmtD(m.fecha)}${m.fiscal.t ? ' · ' + m.fiscal.t : ''}
+
+  // ── Bloque 2: Gastos con IGIC o IRPF (soportado) ──
+  html += `<div style="font-family:'DM Mono',monospace;font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:1.2rem;margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">
+    📥 Gastos con IGIC soportado / retención IRPF
+  </div>`;
+
+  if (!fiscalMovs.length) {
+    html += `<div class="empty" style="padding:1rem">
+      Sin gastos con IGIC o retención registrados<br>
+      <span style="font-size:.75rem;color:var(--muted)">Cuando añadas un gasto con tipo "Factura autónomo" o con IGIC, aparecerá aquí</span>
+    </div>`;
+  } else {
+    html += fiscalMovs.map(m => `
+      <div class="hac-detail-item">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.86rem">${m.descLeg || '—'}${m.fiscal.prov ? ` <span style="color:var(--muted);font-size:.76rem">· ${m.fiscal.prov}</span>` : ''}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:.15rem">
+            ${fmtD(m.fecha)}${m.fiscal.t ? ' · ' + m.fiscal.t : ''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'DM Mono',monospace;font-size:.88rem;color:var(--red)">−${fmt(m.importe)}</div>
+          ${fiscalBadges(m.fiscal)}
         </div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-family:'DM Mono',monospace;font-size:.88rem;color:var(--red)">−${fmt(m.importe)}</div>
-        ${fiscalBadges(m.fiscal)}
-      </div>
-    </div>
-  `).join('');
+    `).join('');
+  }
+
+  listEl.innerHTML = html;
 }
 
 /* ════════════════════════════════════════════════════
