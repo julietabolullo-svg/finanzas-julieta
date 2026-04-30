@@ -664,14 +664,21 @@
       <div class="kpi-card">
         <div class="kpi-label">Ingresos del mes</div>
         <div class="kpi-value pos" id="kpiIng">—</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">IRPF ya descontado</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Gastos del mes</div>
         <div class="kpi-value neg" id="kpiGas">—</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Balance</div>
+        <div class="kpi-label">Balance bruto</div>
         <div class="kpi-value" id="kpiBal">—</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">incluye IGIC pendiente</div>
+      </div>
+      <div class="kpi-card" style="border-color:rgba(232,82,26,.35)">
+        <div class="kpi-label" style="color:var(--accent)">Tu beneficio real</div>
+        <div class="kpi-value" id="kpiBalReal">—</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem" id="kpiIgicInfo">IGIC neto descontado</div>
       </div>
     </div>
 
@@ -715,63 +722,56 @@
               <div class="form-group" style="flex:1;margin:0">
                 <label>Tipo de gasto</label>
                 <select id="movTipoGasto" onchange="onTipoGastoChange()">
-                  <option value="">Sin tipo</option>
+                  <option value="">— Selecciona tipo —</option>
+                  <option value="herramientas_ia">🤖 Herramientas Agencia IA (IA · vídeo · audio · LLM)</option>
                   <option value="gasolina">⛽ Gasolina / Combustible</option>
-                  <option value="herramientas">🔧 Herramientas y equipos</option>
-                  <option value="comidas">🍽️ Comidas / Restauración</option>
-                  <option value="materiales">📦 Materiales y papelería</option>
-                  <option value="software">💻 Software / Suscripciones</option>
+                  <option value="comidas">🍽️ Comida / Restauración</option>
                   <option value="transporte">🚗 Transporte / Viaje</option>
+                  <option value="materiales">📦 Materiales y papelería</option>
                   <option value="publicidad">📢 Publicidad / Marketing</option>
-                  <option value="autonomo">📄 Factura autónomo</option>
+                  <option value="autonomo">📄 Factura autónomo (IRPF retención)</option>
                   <option value="otros">Otros gastos</option>
                 </select>
               </div>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openTicketScanner()" style="flex-shrink:0;height:36px">📷 Escanear</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openTicketScanner()" style="flex-shrink:0;height:36px">📷 Ticket</button>
             </div>
             <!-- Proveedor -->
             <div class="form-group">
               <label>Proveedor (opcional)</label>
               <input type="text" id="movProveedor" placeholder="Nombre del proveedor / emisor">
             </div>
-            <!-- IGIC -->
+            <!-- IGIC / IVA -->
             <div class="form-row">
               <div class="form-group">
-                <label>IGIC (7%)</label>
+                <label>IGIC / IVA en este gasto</label>
                 <select id="movIgicSel" onchange="onIgicSelChange()">
-                  <option value="0">Sin IGIC</option>
-                  <option value="auto">Calcular automático (7%)</option>
-                  <option value="manual">Introducir importe</option>
+                  <option value="0">Sin IGIC/IVA</option>
+                  <option value="auto7">Con IGIC 7% (Canarias) — calcular</option>
+                  <option value="auto21">Con IVA 21% (Península) — calcular</option>
+                  <option value="manual">Introducir importe manual</option>
                 </select>
               </div>
               <div class="form-group" id="movIgicAmtGroup" style="display:none">
-                <label>Importe IGIC (€)</label>
+                <label>Importe IGIC/IVA (€)</label>
                 <input type="number" id="movIgicAmt" step="0.01" min="0" placeholder="0.00">
               </div>
             </div>
             <!-- IRPF retención — solo facturas autónomo -->
             <div class="form-group" id="movIrpfGroup" style="display:none">
-              <label>IRPF retención (€) — Modelo 111</label>
+              <label>IRPF retención que tú pagas (€) — Mod. 111</label>
               <input type="number" id="movIrpfAmt" step="0.01" min="0" placeholder="0.00">
-              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-family:'DM Mono',monospace">15% de la base · Ej: base 1.000€ → retención 150€</div>
+              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-family:'DM Mono',monospace">Ej: factura base 1.000€ → retención 150€ (15%)</div>
             </div>
-            <!-- Bloque + Categoría Supabase -->
-            <div class="form-row">
-              <div class="form-group">
-                <label>Bloque</label>
-                <select id="movBloque">
-                  <option value="empresa">Empresa</option>
-                  <option value="personal">Personal</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Categoría</label>
-                <select id="movCategoria"><option value="">Sin categoría</option></select>
-              </div>
-            </div>
+            <!-- Bloque + categoría oculta (auto desde tipo_gasto) -->
+            <select id="movBloque" style="display:none">
+              <option value="empresa">Empresa</option>
+              <option value="personal">Personal</option>
+            </select>
+            <select id="movCategoria" style="display:none"><option value="">Sin categoría</option></select>
+            <!-- Cliente — solo si se cambia explícitamente -->
             <div class="form-group">
-              <label>Imputar a cliente (opcional)</label>
-              <select id="movGastoCliente"><option value="">Sin cliente / Genérico</option></select>
+              <label>Imputar a cliente (solo si aplica)</label>
+              <select id="movGastoCliente"><option value="">Sin cliente</option></select>
             </div>
           </div>
 
@@ -1127,10 +1127,10 @@
 
     <!-- Zona de subida -->
     <div class="ticket-drop" id="ticketDrop">
-      <div style="font-size:1.5rem;margin-bottom:.35rem">📷</div>
-      <div style="font-weight:500">Haz clic para seleccionar la foto del ticket</div>
-      <div style="margin-top:.4rem;font-size:.72rem;color:var(--muted)">JPG · PNG · HEIC · desde cámara o galería</div>
-      <input type="file" id="ticketFile" accept="image/*" onchange="onTicketFile(this)">
+      <div style="font-size:1.5rem;margin-bottom:.35rem">📎</div>
+      <div style="font-weight:500">Haz clic para seleccionar el ticket o factura</div>
+      <div style="margin-top:.4rem;font-size:.72rem;color:var(--muted)">JPG · PNG · HEIC · PDF · desde cámara o galería</div>
+      <input type="file" id="ticketFile" accept="image/*,application/pdf" onchange="onTicketFile(this)">
     </div>
     <img id="ticketPreview" class="ticket-preview" alt="preview">
 
@@ -1394,11 +1394,11 @@ $('nextMonth').addEventListener('click', () => {
 async function loadDashboard() {
   const { from, to } = monthRange(curYear, curMonth);
 
+  // Movimientos del mes
   const { data: movs, error } = await db
     .from('movimientos')
     .select('*, clientes(nombre), categorias(nombre,bloque)')
-    .gte('fecha', from)
-    .lte('fecha', to)
+    .gte('fecha', from).lte('fecha', to)
     .order('fecha', { ascending: false });
 
   if (error) { toast('Error cargando movimientos', true); return; }
@@ -1416,9 +1416,47 @@ async function loadDashboard() {
   balEl.textContent = fmt(bal);
   balEl.className = 'kpi-value ' + (bal >= 0 ? 'pos' : 'neg');
 
+  // ── Balance real: descontando IGIC neto a pagar a Hacienda ──
+  // IGIC repercutido: 7% de las facturas emitidas este mes
+  const { data: factsM } = await db.from('facturas')
+    .select('base_imponible, iva_pct')
+    .gte('fecha', from).lte('fecha', to);
+  const igicRep = (factsM || []).reduce((s, f) =>
+    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+
+  // IGIC soportado: lo que pagaste de IGIC/IVA en tus gastos este mes (lo recuperas de Hacienda)
+  const igicSop = gastos.reduce((s, m) => {
+    const { fiscal } = decGasto(m.descripcion);
+    return s + (fiscal.igic || 0);
+  }, 0);
+
+  // IRPF de autónomos que tú retienes y pagas a Hacienda (modelo 111)
+  const irpfRetenido = gastos.reduce((s, m) => {
+    const { fiscal } = decGasto(m.descripcion);
+    return s + (fiscal.irpf || 0);
+  }, 0);
+
+  // Neto IGIC = lo que debes a Hacienda este mes por IGIC
+  const igicNeto = igicRep - igicSop;
+  // Balance real = lo que es tuyo de verdad
+  const balReal = bal - igicNeto - irpfRetenido;
+
+  const realEl = $('kpiBalReal');
+  if (realEl) {
+    realEl.textContent = fmt(balReal);
+    realEl.className = 'kpi-value ' + (balReal >= 0 ? 'pos' : 'neg');
+  }
+  const infoEl = $('kpiIgicInfo');
+  if (infoEl) {
+    const parts = [];
+    if (igicNeto > 0)      parts.push(`IGIC −${fmt(igicNeto)}`);
+    if (irpfRetenido > 0)  parts.push(`IRPF mod.111 −${fmt(irpfRetenido)}`);
+    infoEl.textContent = parts.length ? parts.join(' · ') : 'Sin retenciones este mes';
+  }
+
   renderMovList(movs);
   renderBreakdowns(ingresos, gastos);
-  loadGananciaNetByNombre();   // recarga el cuadro global
+  loadGananciaNetByNombre();
 }
 
 const _movCache = {};
@@ -1605,8 +1643,9 @@ function renderBreakdowns(ingresos, gastos) {
   });
   // Gastos: usa categoría Supabase si hay; si no, tipo_gasto de la descripción codificada
   const TIPO_LABEL = {
-    gasolina:'⛽ Gasolina', herramientas:'🔧 Herramientas', comidas:'🍽️ Comidas',
-    materiales:'📦 Materiales', software:'💻 Software', transporte:'🚗 Transporte',
+    herramientas_ia:'🤖 Herramientas Agencia IA',
+    gasolina:'⛽ Gasolina', herramientas:'🔧 Herramientas', comidas:'🍽️ Comida',
+    materiales:'📦 Materiales', software:'💻 Software', transporte:'🚗 Transporte/Viaje',
     publicidad:'📢 Publicidad', autonomo:'📄 Autónomo', otros:'Otros',
   };
   const gastoKey = m => {
@@ -1666,21 +1705,43 @@ $('movForm').addEventListener('submit', async e => {
     if (cId && !cId.startsWith('seed_')) mov.cliente_id = cId;
     else if (cId) mov.descripcion = mov.descripcion; // seed client, solo nombre
   } else {
-    mov.bloque = $('movBloque').value;
-    const catId = $('movCategoria').value;
-    if (catId) mov.categoria_id = catId;
-    const gCId = $('movGastoCliente').value;
-    if (gCId && !gCId.startsWith('seed_')) mov.cliente_id = gCId;
-    if (gCId && gCId.startsWith('seed_')) {
-      const cli = clis.find(c => c.id === gCId);
-      if (cli) mov.descripcion = mov.descripcion + ' [' + cli.nombre + ']';
-    }
+    mov.bloque = 'empresa'; // gastos van siempre a empresa por defecto
     // Datos fiscales: codificar en descripción
     const fiscal = getFiscalFromForm();
     mov.descripcion = encGasto(mov.descripcion, fiscal);
+
+    // Auto-sincronizar categoría Supabase desde tipo_gasto
+    const TIPO_NOMBRES = {
+      herramientas_ia: 'Herramientas Agencia IA',
+      gasolina:        'Gasolina',
+      comidas:         'Comida / Restauración',
+      transporte:      'Transporte / Viaje',
+      materiales:      'Materiales y papelería',
+      publicidad:      'Publicidad / Marketing',
+      autonomo:        'Factura autónomo',
+      otros:           'Otros gastos',
+      herramientas:    'Herramientas',
+      software:        'Software / Suscripciones',
+    };
+    if (fiscal.t) {
+      const catName = TIPO_NOMBRES[fiscal.t] || fiscal.t;
+      let catMatch = cats.find(c => c.nombre.toLowerCase() === catName.toLowerCase());
+      if (!catMatch) {
+        // Crear categoría automáticamente
+        const { data: nc } = await db.from('categorias')
+          .insert({ nombre: catName, bloque: 'empresa' }).select('id').single();
+        if (nc) { mov.categoria_id = nc.id; await loadCats(); }
+      } else {
+        mov.categoria_id = catMatch.id;
+      }
+    }
+
+    // Cliente: solo si se seleccionó uno explícitamente
+    const gCId = $('movGastoCliente').value;
+    if (gCId && !gCId.startsWith('seed_')) mov.cliente_id = gCId;
   }
   const { error } = await db.from('movimientos').insert(mov);
-  if (error) { toast('Error: ' + error.message, true); return; }
+  if (error) { toast('Error al guardar: ' + error.message, true); return; }
   $('movImporte').value = '';
   $('movDesc').value = '';
   clearGastoFiscalForm();
@@ -2184,7 +2245,8 @@ function getFiscalFromForm() {
   const igicSel = $('movIgicSel')?.value || '0';
   const importe = parseFloat($('movImporte')?.value) || 0;
   let igic = 0;
-  if (igicSel === 'auto')   igic = +(importe * 7 / 107).toFixed(2);
+  if      (igicSel === 'auto7')  igic = +(importe * 7  / 107).toFixed(2);
+  else if (igicSel === 'auto21') igic = +(importe * 21 / 121).toFixed(2);
   else if (igicSel === 'manual') igic = parseFloat($('movIgicAmt')?.value) || 0;
   const irpf = parseFloat($('movIrpfAmt')?.value) || 0;
   return { t: tipo, igic, irpf, prov };
@@ -2357,10 +2419,29 @@ function openTicketScanner() {
 function onTicketFile(input) {
   const file = input.files[0];
   if (!file) return;
-  const prev = $('ticketPreview');
-  if (prev) { prev.src = URL.createObjectURL(file); prev.style.display = 'block'; }
   if ($('ticketResult'))   $('ticketResult').style.display = 'none';
   if ($('btnAplicar'))     $('btnAplicar').style.display = 'none';
+
+  const prev = $('ticketPreview');
+  if (file.type === 'application/pdf') {
+    // PDF: mostrar icono en lugar de imagen
+    if (prev) { prev.style.display = 'none'; }
+    const dropZone = $('ticketDrop');
+    if (dropZone) {
+      const existing = dropZone.querySelector('.pdf-indicator');
+      if (existing) existing.remove();
+      const indicator = document.createElement('div');
+      indicator.className = 'pdf-indicator';
+      indicator.style.cssText = 'text-align:center;padding:.75rem;background:rgba(232,82,26,.1);border-radius:var(--rs);margin-top:.5rem;font-family:"DM Mono",monospace;font-size:.8rem;color:var(--accent)';
+      indicator.innerHTML = `📄 PDF seleccionado: <strong>${file.name}</strong><br><span style="color:var(--muted);font-size:.7rem">${(file.size/1024).toFixed(0)} KB</span>`;
+      dropZone.appendChild(indicator);
+    }
+  } else {
+    // Imagen: mostrar preview
+    if (prev) { prev.src = URL.createObjectURL(file); prev.style.display = 'block'; }
+    const existing = $('ticketDrop')?.querySelector('.pdf-indicator');
+    if (existing) existing.remove();
+  }
 }
 
 // ── Parsear texto OCR ──────────────────────────────
@@ -2398,13 +2479,13 @@ function parseTicketText(raw) {
   // Categoría por palabras clave
   const tl = text.toLowerCase();
   const CATS = [
-    ['gasolina',   ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
-    ['comidas',    ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú','menú del dia','bar ','comida']],
-    ['herramientas',['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
-    ['materiales', ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','material','impresion','toner']],
-    ['software',   ['google','microsoft','apple','adobe','spotify','netflix','suscripci','licencia','cloud','hosting','dominio']],
-    ['transporte', ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte']],
-    ['publicidad', ['meta ads','google ads','publicidad','marketing','imprenta','diseño']],
+    ['gasolina',        ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
+    ['comidas',         ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú','menú del dia','bar ','comida']],
+    ['herramientas_ia', ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','ia ','inteligencia artificial','vídeo','video edicion','audio','podcast','descript','kling','heygen','elevenlabs']],
+    ['herramientas',    ['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
+    ['materiales',      ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','material','impresion','toner']],
+    ['transporte',      ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte','airbnb','hotel','alojamiento']],
+    ['publicidad',      ['meta ads','google ads','publicidad','marketing','imprenta','diseño']],
   ];
   let tipo = 'otros';
   for (const [cat, kws] of CATS) {
@@ -2421,13 +2502,55 @@ function parseTicketText(raw) {
 
 async function analyzeTicket() {
   const file = $('ticketFile')?.files[0];
-  if (!file) { toast('Primero selecciona una foto del ticket', true); return; }
+  if (!file) { toast('Primero selecciona un ticket o factura', true); return; }
 
   const btn = $('btnAnalizar');
   const prog = $('ticketProgress');
   btn.disabled = true;
-  if (prog) { prog.style.display = ''; prog.textContent = 'Cargando lector…'; }
 
+  // Si es PDF: intentar extraer texto con FileReader (PDFs digitales) o guiar manualmente
+  if (file.type === 'application/pdf') {
+    if (prog) { prog.style.display = ''; prog.textContent = 'Leyendo PDF…'; }
+    try {
+      const text = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          // Extraer texto básico del PDF (solo funciona con PDFs de texto, no escaneados)
+          const arr = new Uint8Array(e.target.result);
+          let str = '';
+          for (let i = 0; i < arr.length; i++) {
+            const c = arr[i];
+            if (c >= 32 && c < 127) str += String.fromCharCode(c);
+            else if (c === 10 || c === 13) str += '\n';
+          }
+          res(str);
+        };
+        reader.onerror = rej;
+        reader.readAsArrayBuffer(file);
+      });
+
+      if (prog) prog.style.display = 'none';
+      const parsed = parseTicketText(text);
+      // Si no se extrajo importe, mostrar formulario vacío para relleno manual
+      if (!parsed.importe_total) {
+        parsed.descripcion = file.name.replace('.pdf','').slice(0,60);
+        toast('PDF cargado · revisa y completa los datos manualmente', false);
+      }
+      _extractedTicket = parsed;
+      showExtractedResult(parsed);
+    } catch(err) {
+      if (prog) prog.style.display = 'none';
+      toast('No se pudo leer el PDF automáticamente · rellena los datos', true);
+      _extractedTicket = { importe_total: null, fecha: null, descripcion: file.name.replace('.pdf','').slice(0,60), tipo: 'otros', proveedor: '', igic: 0, irpf: 0 };
+      showExtractedResult(_extractedTicket);
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  // Imagen: OCR con Tesseract
+  if (prog) { prog.style.display = ''; prog.textContent = 'Cargando lector…'; }
   try {
     const result = await Tesseract.recognize(file, 'spa+eng', {
       logger: info => {
