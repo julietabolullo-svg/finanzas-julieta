@@ -1260,6 +1260,22 @@
 </div>
 
 <!-- ═══════════════ MODAL: TICKET SCANNER ═══════════════ -->
+<!-- ── Modal duplicado ──────────────────────────────── -->
+<div class="overlay hidden" id="overlayDuplicado">
+  <div class="modal" style="max-width:440px;text-align:center">
+    <div style="font-size:2.2rem;margin-bottom:.5rem">⚠️</div>
+    <div style="font-size:1.15rem;font-weight:700;color:var(--red);letter-spacing:.02em;margin-bottom:.6rem">
+      OJO — ESTE GASTO PARECE REPETIDO
+    </div>
+    <div id="dupDetail" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;font-family:'DM Mono',monospace;font-size:.78rem;text-align:left;margin-bottom:1rem;line-height:1.7"></div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1.2rem">¿Seguro que quieres añadirlo igualmente?</div>
+    <div style="display:flex;gap:.75rem;justify-content:center">
+      <button class="btn btn-ghost" onclick="closeM('overlayDuplicado')">✗ Cancelar</button>
+      <button class="btn btn-danger" id="btnDupConfirm" style="background:var(--red);color:#fff;border:none">Sí, añadir de todas formas</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="overlayTicket">
   <div class="modal">
     <div class="modal-head">
@@ -1368,6 +1384,38 @@ function toast(msg, err = false) {
 
 function openM(id)  { $(id).classList.remove('hidden'); }
 function closeM(id) { $(id).classList.add('hidden'); }
+
+// ── Detección de duplicados ────────────────────────────
+async function checkDuplicado(mov) {
+  if (!mov.importe || !mov.fecha) return null;
+  const ym = mov.fecha.slice(0, 7); // YYYY-MM
+  const from = ym + '-01', to = ym + '-31';
+  const { data } = await db.from('movimientos')
+    .select('id,fecha,importe,descripcion')
+    .eq('tipo', 'gasto')
+    .gte('fecha', from).lte('fecha', to)
+    .gte('importe', mov.importe - 0.02)
+    .lte('importe', mov.importe + 0.02);
+  return data && data.length ? data[0] : null;
+}
+
+let _pendingMovSave = null; // callback para guardar igualmente tras confirmar duplicado
+async function guardarMovimiento(mov, callback) {
+  const dup = await checkDuplicado(mov);
+  if (dup) {
+    const { fiscal } = decGasto(dup.descripcion || '');
+    $('dupDetail').innerHTML =
+      `<div>📅 <b>Fecha:</b> ${fmtD(dup.fecha)}</div>` +
+      `<div>💶 <b>Importe:</b> ${fmt(dup.importe)}</div>` +
+      `<div>🏷️ <b>Tipo:</b> ${fiscal.t || 'gasto'}</div>` +
+      `<div style="margin-top:.3rem;color:var(--muted);font-size:.72rem">${dup.descripcion?.slice(0,80) || ''}</div>`;
+    _pendingMovSave = callback;
+    $('btnDupConfirm').onclick = () => { closeM('overlayDuplicado'); _pendingMovSave && _pendingMovSave(); };
+    openM('overlayDuplicado');
+    return true; // bloqueado → esperar confirmación
+  }
+  return false; // sin duplicado, continuar
+}
 
 /* ════════════════════════════════════════════════════
    TABS
@@ -2026,6 +2074,17 @@ $('movForm').addEventListener('submit', async e => {
     const gCId = $('movGastoCliente').value;
     if (gCId && !gCId.startsWith('seed_')) mov.cliente_id = gCId;
   }
+  // Check duplicado solo para gastos
+  if (movTipo === 'gasto') {
+    const bloqueado = await guardarMovimiento({ importe: mov.importe, fecha: mov.fecha }, async () => {
+      await _doInsertMov(mov);
+    });
+    if (bloqueado) return;
+  }
+  await _doInsertMov(mov);
+});
+
+async function _doInsertMov(mov) {
   const { error } = await db.from('movimientos').insert(mov);
   if (error) { toast('Error al guardar: ' + error.message, true); return; }
   $('movImporte').value = '';
@@ -2047,7 +2106,7 @@ $('movForm').addEventListener('submit', async e => {
     toast('Movimiento guardado ✓');
   }
   loadDashboard();
-});
+}
 
 /* ════════════════════════════════════════════════════
    FACTURAS — LIST
@@ -2801,8 +2860,9 @@ function parseTicketText(raw) {
   // ── IMPORTES ─────────────────────────────────────────────────────────────
   // 1) Buscar total explícito (Total, Amount paid, Subtotal, A pagar…)
   // Acepta cualquier símbolo de moneda
-  // \b word-boundary prevents matching "SUBTOTAL" as "total"; añadimos "importe liquido"
-  const totalRx = /\b(?:total|amount paid|amount due|grand total|importe total|importe\s+l[ií]quido|a\s*pagar|cobrado|pagado|net total)\b\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
+  // \b word-boundary prevents matching "SUBTOTAL" as "total"
+  // "total importe" must come FIRST so it wins over bare "total" in "Total importe 8,47"
+  const totalRx = /\b(?:total\s+importe|total|amount paid|amount due|grand total|importe total|importe\s+l[ií]quido|a\s*pagar|cobrado|pagado|net total)\b\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
   let explicitTotals = [];
   let m;
 
@@ -2944,10 +3004,10 @@ function parseTicketText(raw) {
     ['gestor_impuestos',    ['impuestos multinivel','gestoria fiscal','gestoría fiscal','asesor fiscal','asesoría fiscal','asesoria fiscal','declaracion renta','declaración renta','modelo 130','modelo 303','modelo 390','modelo 347','agencia tributaria','aeat ','presentacion libros','presentación libros','honor presentación']],
     ['seguro_medico',       ['hermandad nac','hermandad de arq','hna ','hna,','seguro salud','seguro médico','seguro medico','sanitas','adeslas','asisa','mapfre salud','cigna','allianz salud','segurcaixa salud']],
     ['proveedores',         ['servicios prestados','servicios profesionales','honorarios profesional','consultoría profesional','consultoria profesional','asesoría','asesoria','anna castells','freelance']],
-    ['telefono',            ['yoigo','movistar','orange telecomunicaciones','vodafone','jazztel','pepephone','digi ','masmovil','llamaya','simyo','lowi','telecomunicaciones']],
+    ['telefono',            ['yoigo','movistar','orange telecomunicaciones','vodafone','jazztel','pepephone','digi ','masmovil','llamaya','simyo','lowi']],
     ['tecnologia',          ['apple store','fnac','mediamarkt','pccomponentes','worten','amazon.es','samsung store','iphone','ipad','macbook','ordenador portátil','ordenador portatil','auricular','cable usb','cargador inalambrico','disco duro externo']],
     ['gimnasio',            ['360 gimnasio','360gimnasio','gimnasio','crossfit','pilates','yoga studio','fitness']],
-    ['herramientas_ia',     ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','inteligencia artificial','descript','kling','heygen','elevenlabs','higgsfield','sora','pika','luma','synthesia']],
+    ['herramientas_ia',     ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','inteligencia artificial','descript','kling','heygen','elevenlabs','higgsfield','sora','pika','luma','synthesia','voice cloud','zadarma','vapi','bland.ai','retell','synthflow','twilio','plivo','vonage','aircall','ringcentral']],
     ['herramientas_espacios',['workspace','google workspace','google drive','gmail','microsoft 365','office 365','dropbox','onedrive','slack','zoom ','teams','hosting','dominio web','godaddy','namecheap','cloudflare','mailerlite','mailchimp','brevo','sendinblue','ionos','hostinger','cpanel']],
     // ── Categorías generales ──────────────────────────────────────────────────
     ['gasolina',            ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
@@ -3039,6 +3099,26 @@ async function analyzeTicket() {
           const page = await pdfDoc.getPage(p);
           const content = await page.getTextContent();
           fullText += content.items.map(i => i.str).join(' ') + '\n';
+        }
+
+        // PDF imagen (captura de pantalla) — PDF.js no extrae texto, usar OCR por canvas
+        if (fullText.trim().length < 80 && typeof Tesseract !== 'undefined') {
+          if (prog) { prog.style.display = ''; prog.textContent = 'PDF imagen — OCR…'; }
+          fullText = '';
+          for (let p = 1; p <= pdfDoc.numPages; p++) {
+            const page = await pdfDoc.getPage(p);
+            const vp = page.getViewport({ scale: 2.0 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+            const res = await Tesseract.recognize(cv, 'spa+eng', {
+              logger: info => {
+                if (prog && info.status === 'recognizing text')
+                  prog.textContent = `OCR pág ${p}/${pdfDoc.numPages}… ${Math.round((info.progress||0)*100)}%`;
+              }
+            });
+            fullText += res.data.text + '\n';
+          }
         }
       } else {
         // Fallback: decodificar solo strings de texto del PDF (streams /BT…ET)
