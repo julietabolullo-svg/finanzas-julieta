@@ -2753,35 +2753,77 @@ function parseTicketText(raw) {
   const text = raw || '';
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Importes: €38.25 ó 38,25 € ó Total: 38.25 — el € puede ir antes o después
-  const amtRx = /(?:€\s*(\d{1,6}[.,]\d{2}))|(?:(\d{1,6}[.,]\d{2})\s*€)|(?:(?:total|importe|amount paid|subtotal|a\s*pagar|cobrado|pagado)[^0-9€]{0,10}(\d{1,6}[.,]\d{2}))/gi;
-  const amounts = [];
+  // ── IMPORTES ─────────────────────────────────────────────────────────────
+  // 1) Buscar total explícito (Total, Amount paid, Subtotal, A pagar…)
+  const totalRx = /(?:total|amount paid|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*€?\s*(\d{1,6}[.,]\d{2})\s*€?/gi;
+  let explicitTotals = [];
   let m;
-  while ((m = amtRx.exec(text)) !== null) {
-    const val = parseFloat((m[1] || m[2] || m[3]).replace(',', '.'));
-    if (val > 0 && val < 100000) amounts.push(val);
+  while ((m = totalRx.exec(text)) !== null) {
+    const v = parseFloat(m[1].replace(',','.'));
+    if (v > 0) explicitTotals.push(v);
   }
-  // El importe total suele ser el más grande (o el "Amount paid" si está)
-  let importe_total = amounts.length ? Math.max(...amounts) : null;
-  // Si hay un "Amount paid: X" o "paid on ... X €", preferir ese valor
-  const paidM = text.match(/(?:amount paid|paid on[^€0-9]*)[^0-9]*€?\s*(\d{1,6}[.,]\d{2})/i);
-  if (paidM) importe_total = parseFloat(paidM[1].replace(',','.'));
+  // "€38.25 paid on …" o "paid … €38.25"
+  const paidM = text.match(/(?:amount paid|paid on[^€\d]*)[^€\d]*€?\s*(\d{1,6}[.,]\d{2})/i)
+             || text.match(/€\s*(\d{1,6}[.,]\d{2})\s+paid/i);
+  if (paidM) explicitTotals.push(parseFloat(paidM[1].replace(',','.')));
 
-  // Fecha — formato numérico DD/MM/YYYY o YYYY-MM-DD
-  let fecha = null;
-  const dateNumRx = /(\d{4})-(\d{2})-(\d{2})/;
-  const dateEuRx  = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/;
-  const dateEngRx = /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})\b/i;
+  // 2) Todos los importes con símbolo € (candidatos a líneas de detalle)
+  const lineRx = /€\s*(\d{1,6}[.,]\d{2})|(\d{1,6}[.,]\d{2})\s*€/g;
+  const lineAmounts = [];
+  while ((m = lineRx.exec(text)) !== null) {
+    const v = parseFloat((m[1]||m[2]).replace(',','.'));
+    if (v > 0 && v < 100000) lineAmounts.push(v);
+  }
+
+  let importe_total = null;
+  if (explicitTotals.length) {
+    // Usar el total explícito más grande (evita coger subtotales parciales)
+    importe_total = Math.max(...explicitTotals);
+  } else if (lineAmounts.length > 1) {
+    // Sin total explícito y hay varios importes → sumarlos (PDF con múltiples gastos)
+    importe_total = +lineAmounts.reduce((s,v) => s+v, 0).toFixed(2);
+  } else if (lineAmounts.length === 1) {
+    importe_total = lineAmounts[0];
+  }
+
+  // ── FECHA ─────────────────────────────────────────────────────────────────
+  const MONTHS_ES = { enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12 };
   const MONTHS_EN = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-  let diso, deu, deng;
-  if ((diso = dateNumRx.exec(text)))
-    fecha = `${diso[1]}-${diso[2]}-${diso[3]}`;
-  else if ((deng = dateEngRx.exec(text))) {
-    const mo = MONTHS_EN[deng[1].slice(0,3).toLowerCase()];
-    fecha = `${deng[3]}-${String(mo).padStart(2,'0')}-${String(deng[2]).padStart(2,'0')}`;
-  } else if ((deu = dateEuRx.exec(text))) {
-    const y = deu[3].length === 2 ? '20' + deu[3] : deu[3];
-    fecha = `${y}-${deu[2].padStart(2,'0')}-${deu[1].padStart(2,'0')}`;
+  let fecha = null;
+
+  // ISO: 2026-05-06
+  const dIso = /(\d{4})[\/\-](\d{2})[\/\-](\d{2})/.exec(text);
+  // Español largo: "6 de mayo de 2026"
+  const dEsL = /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(\d{4})/i.exec(text);
+  // Español corto: "mayo 2026" o "05/2026"
+  const dEsM = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(\d{4})\b/i.exec(text);
+  // Inglés: "May 6, 2026" o "6 May 2026"
+  const dEngA = /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})\b/i.exec(text);
+  const dEngB = /\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})\b/i.exec(text);
+  // EU numérico: 06/05/2026 o 06-05-2026 (ignora si ya encontramos ISO arriba)
+  const dEuN = /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/.exec(text);
+  // Corto EU: 06/05/26
+  const dEuS = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})\b/.exec(text);
+
+  if (dIso && +dIso[2] <= 12 && +dIso[3] <= 31)
+    fecha = `${dIso[1]}-${dIso[2]}-${dIso[3]}`;
+  else if (dEsL) {
+    const mo = MONTHS_ES[dEsL[2].toLowerCase()];
+    fecha = `${dEsL[3]}-${String(mo).padStart(2,'0')}-${dEsL[1].padStart(2,'0')}`;
+  } else if (dEngA) {
+    const mo = MONTHS_EN[dEngA[1].slice(0,3).toLowerCase()];
+    fecha = `${dEngA[3]}-${String(mo).padStart(2,'0')}-${String(dEngA[2]).padStart(2,'0')}`;
+  } else if (dEngB) {
+    const mo = MONTHS_EN[dEngB[2].slice(0,3).toLowerCase()];
+    fecha = `${dEngB[3]}-${String(mo).padStart(2,'0')}-${String(dEngB[1]).padStart(2,'0')}`;
+  } else if (dEuN && +dEuN[1] <= 31 && +dEuN[2] <= 12)
+    fecha = `${dEuN[3]}-${dEuN[2].padStart(2,'0')}-${dEuN[1].padStart(2,'0')}`;
+  else if (dEuS && +dEuS[1] <= 31 && +dEuS[2] <= 12)
+    fecha = `20${dEuS[3]}-${dEuS[2].padStart(2,'0')}-${dEuS[1].padStart(2,'0')}`;
+  else if (dEsM) {
+    const mo = MONTHS_ES[dEsM[1].toLowerCase()];
+    // Solo mes y año → usar día 1
+    fecha = `${dEsM[2]}-${String(mo).padStart(2,'0')}-01`;
   }
 
   // IGIC
@@ -2822,7 +2864,10 @@ function parseTicketText(raw) {
     ? itemLineM[1].trim().slice(0, 60)
     : (proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo);
 
-  return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf };
+  // Indicar si el importe fue sumado de varios ítems
+  const sumado = !explicitTotals.length && lineAmounts.length > 1;
+
+  return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf, sumado, nItems: lineAmounts.length };
 }
 
 async function analyzeTicket() {
@@ -2915,10 +2960,13 @@ async function analyzeTicket() {
 function showExtractedResult(d) {
   const el = $('ticketResultContent');
   if (!el) return;
+  const importeNote = d.sumado
+    ? `<span style="color:var(--yellow);font-size:.65rem;margin-left:.4rem">∑ ${d.nItems} ítems sumados</span>`
+    : '';
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-family:'DM Mono',monospace;font-size:.78rem">
-      <div><span style="color:var(--muted)">Importe:</span> <strong style="color:var(--green)">${d.importe_total ? fmt(d.importe_total) : '—'}</strong></div>
-      <div><span style="color:var(--muted)">Fecha:</span> ${d.fecha ? fmtD(d.fecha) : '—'}</div>
+      <div><span style="color:var(--muted)">Importe:</span> <strong style="color:var(--green)">${d.importe_total ? fmt(d.importe_total) : '—'}</strong>${importeNote}</div>
+      <div><span style="color:var(--muted)">Fecha:</span> ${d.fecha ? fmtD(d.fecha) : '<span style="color:var(--red)">no detectada</span>'}</div>
       <div><span style="color:var(--muted)">Tipo:</span> ${d.tipo || '—'}</div>
       <div><span style="color:var(--muted)">Proveedor:</span> ${d.proveedor || '—'}</div>
       <div><span style="color:var(--muted)">IGIC:</span> ${d.igic ? fmt(d.igic) : '0,00 €'}</div>
