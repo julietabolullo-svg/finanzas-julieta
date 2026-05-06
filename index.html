@@ -2782,16 +2782,38 @@ function parseTicketText(raw) {
   // ── IMPORTES ─────────────────────────────────────────────────────────────
   // 1) Buscar total explícito (Total, Amount paid, Subtotal, A pagar…)
   // Acepta cualquier símbolo de moneda
-  const totalRx = /(?:total|amount paid|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
+  const totalRx = /(?:total|amount paid|amount due|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
   let explicitTotals = [];
   let m;
+
+  // ── Caso especial: PDF multi-factura (ej. AVON con varias páginas)
+  // "Total Factura:" aparece una vez por página → sumar TODAS
+  const facturaRx = /total\s+factura\s*:?\s*(\d{1,6}[.,]\d{2})/gi;
+  const facturaTotals = [];
+  while ((m = facturaRx.exec(text)) !== null) {
+    const v = parseFloat(m[1].replace(',','.'));
+    if (v > 0) facturaTotals.push(v);
+  }
+
+  // IGIC de multi-factura: leer líneas "Total Pedido.:" y extraer columna IGIC
+  // Formato: "Total Pedido.: PVP [descuento] BASE IGIC APAGAR"
+  // IGIC = penúltimo número antes de A Pagar (= Total Factura de esa página)
+  const igicLines = [];
+  const pedidoRx = /total\s+pedido\.?\s*:?\s*((?:[\d.,]+\s+){2,5}[\d.,]+)/gi;
+  while ((m = pedidoRx.exec(text)) !== null) {
+    const nums = m[1].trim().split(/\s+/).map(n => parseFloat(n.replace(',','.')));
+    if (nums.length >= 3) igicLines.push(nums[nums.length - 2]); // penúltimo = IGIC
+  }
+
+  // Buscar total explícito genérico (Total, Amount paid…)
   while ((m = totalRx.exec(text)) !== null) {
     const v = parseFloat(m[1].replace(',','.'));
     if (v > 0) explicitTotals.push(v);
   }
-  // "€/$38.25 paid on …" o "paid … €/$38.25"
-  const paidM = text.match(/(?:amount paid|paid on[^€$£\d]*)[^€$£\d]*[$€£]?\s*(\d{1,6}[.,]\d{2})/i)
-             || text.match(/[$€£]\s*(\d{1,6}[.,]\d{2})\s+paid/i);
+  const paidM = text.match(/amount\s+due[^€$£\d]*[$€£]?\s*(\d{1,6}[.,]\d{2})/i)
+             || text.match(/(?:amount paid|paid on[^€$£\d]*)[^€$£\d]*[$€£]?\s*(\d{1,6}[.,]\d{2})/i)
+             || text.match(/[$€£]\s*(\d{1,6}[.,]\d{2})\s+(?:paid|due)/i)
+             || text.match(/(\d{1,6}[.,]\d{2})\s+USD\s+due/i);
   if (paidM) explicitTotals.push(parseFloat(paidM[1].replace(',','.')));
 
   // 2) Todos los importes con símbolo de moneda (candidatos a líneas de detalle)
@@ -2803,7 +2825,15 @@ function parseTicketText(raw) {
   }
 
   let importe_total = null;
-  if (explicitTotals.length) {
+  let igicMulti = 0;
+  if (facturaTotals.length > 1) {
+    // Multi-factura: sumar todos los "Total Factura"
+    importe_total = +facturaTotals.reduce((s,v) => s+v, 0).toFixed(2);
+    igicMulti = igicLines.length ? +igicLines.reduce((s,v) => s+v, 0).toFixed(2) : 0;
+  } else if (facturaTotals.length === 1) {
+    importe_total = facturaTotals[0];
+    igicMulti = igicLines.length ? igicLines[0] : 0;
+  } else if (explicitTotals.length) {
     importe_total = Math.max(...explicitTotals);
   } else if (lineAmounts.length > 1) {
     importe_total = +lineAmounts.reduce((s,v) => s+v, 0).toFixed(2);
@@ -2851,9 +2881,12 @@ function parseTicketText(raw) {
     fecha = `${dEsM[2]}-${String(mo).padStart(2,'0')}-01`;
   }
 
-  // IGIC
-  const igicM = text.match(/igic[^0-9]*(\d{1,4}[.,]\d{2})/i);
-  const igic = igicM ? parseFloat(igicM[1].replace(',', '.')) : 0;
+  // IGIC — preferir el sumado de multi-factura; si no, buscar en texto
+  let igic = igicMulti;
+  if (!igic) {
+    const igicM = text.match(/igic[^0-9]*(\d{1,4}[.,]\d{2})/i);
+    igic = igicM ? parseFloat(igicM[1].replace(',', '.')) : 0;
+  }
 
   // IRPF
   const irpfM = text.match(/irpf[^0-9]*(\d{1,4}[.,]\d{2})/i);
@@ -2864,7 +2897,7 @@ function parseTicketText(raw) {
   const CATS = [
     ['gasolina',        ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
     ['comidas',         ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú','menú del dia','bar ','comida']],
-    ['herramientas_ia', ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','ia ','inteligencia artificial','vídeo','video edicion','audio','podcast','descript','kling','heygen','elevenlabs']],
+    ['herramientas_ia', ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','ia ','inteligencia artificial','vídeo','video edicion','audio','podcast','descript','kling','heygen','elevenlabs','higgsfield','sora','pika','luma','synthesia']],
     ['herramientas',    ['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
     ['materiales',      ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','material','impresion','toner']],
     ['transporte',      ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte','airbnb','hotel','alojamiento']],
@@ -2889,11 +2922,12 @@ function parseTicketText(raw) {
     ? itemLineM[1].trim().slice(0, 60)
     : (proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo);
 
-  // Indicar si el importe fue sumado de varios ítems
-  const sumado = !explicitTotals.length && lineAmounts.length > 1;
+  // Indicar si el importe fue sumado de varios facturas/ítems
+  const sumado = facturaTotals.length > 1 || (!explicitTotals.length && !facturaTotals.length && lineAmounts.length > 1);
+  const nItems = facturaTotals.length > 1 ? facturaTotals.length : lineAmounts.length;
 
   return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf,
-           sumado, nItems: lineAmounts.length, currency: detectedCurrency };
+           sumado, nItems, currency: detectedCurrency };
 }
 
 // Caché de tasas para no repetir llamadas en la misma sesión
