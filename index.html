@@ -2323,26 +2323,49 @@ $('factForm').addEventListener('submit', async e => {
     if (cliId) await loadClis();
   }
 
+  // Helper: garantiza que existe un movimiento asociado a esta factura (crea si no existe)
+  const upsertMovFactura = async () => {
+    const movData = { fecha: factData.fecha, importe: +total.toFixed(2),
+                      descripcion: movDesc, ...(cliId ? { cliente_id: cliId } : {}) };
+    const { data: existing } = await db.from('movimientos')
+      .select('id').like('descripcion', $('fNum').value + ' ·%').limit(1);
+    if (existing && existing.length) {
+      await db.from('movimientos').update(movData).eq('id', existing[0].id);
+    } else {
+      const { error: me } = await db.from('movimientos')
+        .insert({ tipo: 'ingreso', bloque: 'empresa', ...movData });
+      if (me) console.warn('movimiento insert error:', me.message);
+    }
+  };
+
   if (editId) {
     // ── EDITAR factura existente ──
     const { error } = await db.from('facturas').update(factData).eq('id', editId);
     if (error) { toast('Error: ' + error.message, true); return; }
-    await db.from('movimientos')
-      .update({ fecha: factData.fecha, importe: +total.toFixed(2), descripcion: movDesc,
-                ...(cliId ? { cliente_id: cliId } : {}) })
-      .like('descripcion', $('fNum').value + ' ·%');
+    await upsertMovFactura();
     closeM('overlayFactura');
     toast('Factura actualizada ✓');
   } else {
     // ── NUEVA factura ──
     const { error } = await db.from('facturas').insert({ ...factData, estado: 'pendiente' });
     if (error) { toast('Error: ' + error.message, true); return; }
-    const movInsert = { tipo: 'ingreso', fecha: factData.fecha, importe: +total.toFixed(2),
-                        descripcion: movDesc, bloque: 'empresa',
-                        ...(cliId ? { cliente_id: cliId } : {}) };
-    await db.from('movimientos').insert(movInsert);
+    await upsertMovFactura();
     closeM('overlayFactura');
-    toast('Factura creada ✓');
+
+    // Navegar el dashboard al mes de la factura
+    if (factData.fecha) {
+      const [fy, fm] = factData.fecha.split('-').map(Number);
+      if (fy !== curYear || (fm - 1) !== curMonth) {
+        curYear  = fy;
+        curMonth = fm - 1;
+        updateMonthDisplay();
+        toast(`Factura creada ✓ — dashboard → ${MESES[curMonth]} ${curYear}`);
+      } else {
+        toast('Factura creada ✓');
+      }
+    } else {
+      toast('Factura creada ✓');
+    }
   }
 
   $('editFacturaId').value = '';
