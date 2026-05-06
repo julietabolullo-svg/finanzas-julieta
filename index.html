@@ -141,6 +141,7 @@
       align-items: center;
       gap: .75rem;
       margin-bottom: 1.75rem;
+      flex-wrap: wrap;
     }
     .month-nav button {
       background: var(--bg2);
@@ -162,6 +163,80 @@
       font-size: 1.5rem;
       font-weight: 600;
       color: var(--sand);
+    }
+
+    /* ── VIEW TOGGLE (Mes / Año) ───────────────────── */
+    .view-toggle {
+      display: flex;
+      gap: .2rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: .2rem;
+      margin-left: auto;
+    }
+    .view-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: .7rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: .3rem .85rem;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: all .18s;
+      white-space: nowrap;
+    }
+    .view-btn.active {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 500;
+    }
+
+    /* ── YEAR BREAKDOWN TABLE ───────────────────────── */
+    .year-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'DM Mono', monospace;
+      font-size: .78rem;
+    }
+    .year-table th {
+      color: var(--muted);
+      font-size: .65rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: .5rem .6rem;
+      border-bottom: 1px solid var(--border);
+      text-align: right;
+    }
+    .year-table th:first-child { text-align: left; }
+    .year-table td {
+      padding: .52rem .6rem;
+      border-bottom: 1px solid rgba(200,191,176,.06);
+      text-align: right;
+      vertical-align: middle;
+    }
+    .year-table td:first-child {
+      text-align: left;
+      color: var(--sand);
+      font-weight: 500;
+    }
+    .year-table tr:last-child td {
+      border-bottom: none;
+      font-weight: 700;
+      border-top: 1px solid var(--border);
+      color: var(--sand);
+    }
+    .year-table .pos { color: var(--green); }
+    .year-table .neg { color: var(--red); }
+    .year-mini-bar {
+      display: inline-block;
+      height: 6px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-left: .4rem;
     }
 
     /* ── CARD ───────────────────────────────────────── */
@@ -658,27 +733,86 @@
       <button id="prevMonth">&#8592;</button>
       <div class="month-display" id="monthDisplay"></div>
       <button id="nextMonth">&#8594;</button>
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewMesBtn" onclick="setDashView('mes')">Mes</button>
+        <button class="view-btn" id="viewAñoBtn" onclick="setDashView('año')">Año</button>
+      </div>
     </div>
 
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Ingresos del mes</div>
-        <div class="kpi-value pos" id="kpiIng">—</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">IRPF ya descontado</div>
+    <!-- ── KPIs MENSUALES ──────────────────── -->
+    <div id="dashMesView">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Ingresos del mes</div>
+          <div class="kpi-value pos" id="kpiIng">—</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">IRPF ya descontado</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Gastos del mes</div>
+          <div class="kpi-value neg" id="kpiGas">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Balance bruto</div>
+          <div class="kpi-value" id="kpiBal">—</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">incluye IGIC pendiente</div>
+        </div>
+        <div class="kpi-card" style="border-color:rgba(232,82,26,.35)">
+          <div class="kpi-label" style="color:var(--accent)">Tu beneficio real</div>
+          <div class="kpi-value" id="kpiBalReal">—</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem" id="kpiIgicInfo">IGIC neto descontado</div>
+        </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gastos del mes</div>
-        <div class="kpi-value neg" id="kpiGas">—</div>
+    </div>
+
+    <!-- ── RESUMEN ANUAL ──────────────────── -->
+    <div id="dashAñoView" style="display:none">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+        <div style="font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:600;color:var(--sand)" id="yearTitle"></div>
+        <div style="display:flex;gap:.3rem">
+          <button style="background:var(--bg2);border:1px solid var(--border);color:var(--sand);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:.9rem" onclick="changeYear(-1)">&#8592;</button>
+          <button style="background:var(--bg2);border:1px solid var(--border);color:var(--sand);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:.9rem" onclick="changeYear(1)">&#8594;</button>
+        </div>
+        <div id="yearLoading" style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);display:none">Cargando...</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Balance bruto</div>
-        <div class="kpi-value" id="kpiBal">—</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem">incluye IGIC pendiente</div>
+
+      <!-- KPIs anuales -->
+      <div class="kpi-grid" style="margin-bottom:1.5rem">
+        <div class="kpi-card">
+          <div class="kpi-label">Ingresos del año</div>
+          <div class="kpi-value pos" id="kpiYearIng">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Gastos del año</div>
+          <div class="kpi-value neg" id="kpiYearGas">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Balance bruto anual</div>
+          <div class="kpi-value" id="kpiYearBal">—</div>
+        </div>
+        <div class="kpi-card" style="border-color:rgba(232,82,26,.35)">
+          <div class="kpi-label" style="color:var(--accent)">Beneficio real anual</div>
+          <div class="kpi-value" id="kpiYearReal">—</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem" id="kpiYearIgicInfo">—</div>
+        </div>
       </div>
-      <div class="kpi-card" style="border-color:rgba(232,82,26,.35)">
-        <div class="kpi-label" style="color:var(--accent)">Tu beneficio real</div>
-        <div class="kpi-value" id="kpiBalReal">—</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:.3rem" id="kpiIgicInfo">IGIC neto descontado</div>
+
+      <!-- Tabla mensual -->
+      <div class="card">
+        <div class="card-title" style="margin-bottom:1rem">Desglose mes a mes</div>
+        <div id="yearTableWrap" style="overflow-x:auto">
+          <table class="year-table">
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>Ingresos</th>
+                <th>Gastos</th>
+                <th>Balance</th>
+                <th>Beneficio real</th>
+              </tr>
+            </thead>
+            <tbody id="yearTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1375,8 +1509,27 @@ document.querySelectorAll('.type-btn').forEach(btn => {
 /* ════════════════════════════════════════════════════
    MONTH NAV
 ════════════════════════════════════════════════════ */
+let dashView = 'mes'; // 'mes' | 'año'
+
 function updateMonthDisplay() {
   $('monthDisplay').textContent = `${MESES[curMonth]} ${curYear}`;
+}
+
+function setDashView(v) {
+  dashView = v;
+  $('viewMesBtn').classList.toggle('active', v === 'mes');
+  $('viewAñoBtn').classList.toggle('active', v === 'año');
+  $('prevMonth').style.display = v === 'mes' ? '' : 'none';
+  $('nextMonth').style.display = v === 'mes' ? '' : 'none';
+  $('monthDisplay').style.display = v === 'mes' ? '' : 'none';
+  $('dashMesView').style.display = v === 'mes' ? '' : 'none';
+  $('dashAñoView').style.display = v === 'año' ? '' : 'none';
+  loadDashboard();
+}
+
+function changeYear(delta) {
+  curYear += delta;
+  loadDashboard();
 }
 
 $('prevMonth').addEventListener('click', () => {
@@ -1392,6 +1545,8 @@ $('nextMonth').addEventListener('click', () => {
    DASHBOARD
 ════════════════════════════════════════════════════ */
 async function loadDashboard() {
+  if (dashView === 'año') { await loadYearDash(); return; }
+  updateMonthDisplay();
   const { from, to } = monthRange(curYear, curMonth);
 
   // Movimientos del mes
@@ -1457,6 +1612,126 @@ async function loadDashboard() {
   renderMovList(movs);
   renderBreakdowns(ingresos, gastos);
   loadGananciaNetByNombre();
+}
+
+/* ════════════════════════════════════════════════════
+   RESUMEN ANUAL
+════════════════════════════════════════════════════ */
+async function loadYearDash() {
+  const yr = curYear;
+  $('yearTitle').textContent = `Resumen ${yr}`;
+  $('yearLoading').style.display = '';
+
+  const from = `${yr}-01-01`;
+  const to   = `${yr}-12-31`;
+
+  // Todos los movimientos del año
+  const { data: movs } = await db
+    .from('movimientos')
+    .select('tipo, importe, fecha, descripcion')
+    .gte('fecha', from).lte('fecha', to);
+
+  // Todas las facturas del año (para IGIC repercutido)
+  const { data: facts } = await db
+    .from('facturas')
+    .select('base_imponible, iva_pct, fecha')
+    .gte('fecha', from).lte('fecha', to);
+
+  $('yearLoading').style.display = 'none';
+
+  const allMovs   = movs  || [];
+  const allFacts  = facts || [];
+
+  // Totales anuales
+  const ingresos = allMovs.filter(m => m.tipo === 'ingreso');
+  const gastos   = allMovs.filter(m => m.tipo === 'gasto');
+  const totIng   = ingresos.reduce((s, m) => s + (m.importe || 0), 0);
+  const totGas   = gastos.reduce((s, m) => s + (m.importe || 0), 0);
+  const balBruto = totIng - totGas;
+
+  // IGIC neto anual
+  const igicRep = allFacts.reduce((s, f) =>
+    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+  const igicSop = gastos.reduce((s, m) => {
+    const { fiscal } = decGasto(m.descripcion);
+    return s + (fiscal.igic || 0);
+  }, 0);
+  const irpfRet = gastos.reduce((s, m) => {
+    const { fiscal } = decGasto(m.descripcion);
+    return s + (fiscal.irpf || 0);
+  }, 0);
+  const igicNeto  = igicRep - igicSop;
+  const balReal   = balBruto - igicNeto - irpfRet;
+
+  // KPIs anuales
+  const setKPI = (id, val, cls) => {
+    const el = $(id); if (!el) return;
+    el.textContent = fmt(val);
+    el.className = 'kpi-value ' + (cls || (val >= 0 ? 'pos' : 'neg'));
+  };
+  setKPI('kpiYearIng',  totIng,   'pos');
+  setKPI('kpiYearGas',  totGas,   'neg');
+  setKPI('kpiYearBal',  balBruto);
+  setKPI('kpiYearReal', balReal);
+
+  const infoParts = [];
+  if (igicNeto  > 0) infoParts.push(`IGIC neto −${fmt(igicNeto)}`);
+  if (irpfRet   > 0) infoParts.push(`IRPF mod.111 −${fmt(irpfRet)}`);
+  const infoEl = $('kpiYearIgicInfo');
+  if (infoEl) infoEl.textContent = infoParts.length ? infoParts.join(' · ') : 'Sin retenciones este año';
+
+  // Tabla mes a mes
+  const monthData = Array.from({ length: 12 }, (_, i) => {
+    const mm = String(i + 1).padStart(2, '0');
+    const mFrom = `${yr}-${mm}-01`;
+    const mTo   = `${yr}-${mm}-31`; // Supabase .lte is inclusive, fine for all months
+    const mIng  = allMovs.filter(m => m.tipo === 'ingreso' && m.fecha >= mFrom && m.fecha <= mTo)
+                          .reduce((s, m) => s + (m.importe || 0), 0);
+    const mGas  = allMovs.filter(m => m.tipo === 'gasto'   && m.fecha >= mFrom && m.fecha <= mTo)
+                          .reduce((s, m) => s + (m.importe || 0), 0);
+    const mBal  = mIng - mGas;
+
+    // IGIC mes
+    const mIgicRep = allFacts.filter(f => f.fecha >= mFrom && f.fecha <= mTo)
+                              .reduce((s, f) => s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+    const mIgicSop = allMovs.filter(m => m.tipo === 'gasto' && m.fecha >= mFrom && m.fecha <= mTo)
+                             .reduce((s, m) => { const { fiscal } = decGasto(m.descripcion); return s + (fiscal.igic || 0); }, 0);
+    const mIrpf    = allMovs.filter(m => m.tipo === 'gasto' && m.fecha >= mFrom && m.fecha <= mTo)
+                             .reduce((s, m) => { const { fiscal } = decGasto(m.descripcion); return s + (fiscal.irpf || 0); }, 0);
+    const mReal = mBal - (mIgicRep - mIgicSop) - mIrpf;
+
+    return { mes: MESES[i], ing: mIng, gas: mGas, bal: mBal, real: mReal, hasData: mIng > 0 || mGas > 0 };
+  });
+
+  const maxIng = Math.max(...monthData.map(d => d.ing), 1);
+  const maxGas = Math.max(...monthData.map(d => d.gas), 1);
+
+  const tbody = $('yearTableBody');
+  const today = new Date();
+  const curM  = yr === today.getFullYear() ? today.getMonth() : 11;
+
+  tbody.innerHTML = monthData.map((d, i) => {
+    const isFuture = yr === today.getFullYear() && i > today.getMonth();
+    const rowStyle = isFuture ? 'opacity:.35' : (i === curM && yr === today.getFullYear() ? 'background:rgba(232,82,26,.07)' : '');
+    const ingBar   = `<span class="year-mini-bar" style="width:${(d.ing/maxIng*60).toFixed(0)}px;background:var(--green);opacity:.6"></span>`;
+    const gasBar   = `<span class="year-mini-bar" style="width:${(d.gas/maxGas*60).toFixed(0)}px;background:var(--red);opacity:.6"></span>`;
+    return `<tr style="${rowStyle}">
+      <td>${d.mes}${i === curM && yr === today.getFullYear() ? ' ◂' : ''}</td>
+      <td class="pos">${d.ing > 0 ? fmt(d.ing) + ingBar : '—'}</td>
+      <td class="neg">${d.gas > 0 ? fmt(d.gas) + gasBar : '—'}</td>
+      <td class="${d.bal >= 0 ? 'pos' : 'neg'}">${d.hasData ? fmt(d.bal) : '—'}</td>
+      <td class="${d.real >= 0 ? 'pos' : 'neg'}">${d.hasData ? fmt(d.real) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Fila de totales
+  tbody.innerHTML += `<tr>
+    <td>TOTAL</td>
+    <td class="pos">${fmt(totIng)}</td>
+    <td class="neg">${fmt(totGas)}</td>
+    <td class="${balBruto >= 0 ? 'pos' : 'neg'}">${fmt(balBruto)}</td>
+    <td class="${balReal >= 0 ? 'pos' : 'neg'}">${fmt(balReal)}</td>
+  </tr>`;
 }
 
 const _movCache = {};
