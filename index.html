@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2715,23 +2716,35 @@ function parseTicketText(raw) {
   const text = raw || '';
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Importes: todos los patrones de precio en el ticket
-  const amtRx = /(?:total|importe|a\s*pagar|cobrado|pagado)?[:\s]*(\d{1,6}[.,]\d{2})\s*€?/gi;
+  // Importes: €38.25 ó 38,25 € ó Total: 38.25 — el € puede ir antes o después
+  const amtRx = /(?:€\s*(\d{1,6}[.,]\d{2}))|(?:(\d{1,6}[.,]\d{2})\s*€)|(?:(?:total|importe|amount paid|subtotal|a\s*pagar|cobrado|pagado)[^0-9€]{0,10}(\d{1,6}[.,]\d{2}))/gi;
   const amounts = [];
   let m;
   while ((m = amtRx.exec(text)) !== null) {
-    amounts.push(parseFloat(m[1].replace(',', '.')));
+    const val = parseFloat((m[1] || m[2] || m[3]).replace(',', '.'));
+    if (val > 0 && val < 100000) amounts.push(val);
   }
-  // El importe total suele ser el más grande
-  const importe_total = amounts.length ? Math.max(...amounts) : null;
+  // El importe total suele ser el más grande (o el "Amount paid" si está)
+  let importe_total = amounts.length ? Math.max(...amounts) : null;
+  // Si hay un "Amount paid: X" o "paid on ... X €", preferir ese valor
+  const paidM = text.match(/(?:amount paid|paid on[^€0-9]*)[^0-9]*€?\s*(\d{1,6}[.,]\d{2})/i);
+  if (paidM) importe_total = parseFloat(paidM[1].replace(',','.'));
 
-  // Fecha
-  const dateRx = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/;
-  const dm = text.match(dateRx);
+  // Fecha — formato numérico DD/MM/YYYY o YYYY-MM-DD
   let fecha = null;
-  if (dm) {
-    const y = dm[3].length === 2 ? '20' + dm[3] : dm[3];
-    fecha = `${y}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
+  const dateNumRx = /(\d{4})-(\d{2})-(\d{2})/;
+  const dateEuRx  = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/;
+  const dateEngRx = /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})\b/i;
+  const MONTHS_EN = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+  let diso, deu, deng;
+  if ((diso = dateNumRx.exec(text)))
+    fecha = `${diso[1]}-${diso[2]}-${diso[3]}`;
+  else if ((deng = dateEngRx.exec(text))) {
+    const mo = MONTHS_EN[deng[1].slice(0,3).toLowerCase()];
+    fecha = `${deng[3]}-${String(mo).padStart(2,'0')}-${String(deng[2]).padStart(2,'0')}`;
+  } else if ((deu = dateEuRx.exec(text))) {
+    const y = deu[3].length === 2 ? '20' + deu[3] : deu[3];
+    fecha = `${y}-${deu[2].padStart(2,'0')}-${deu[1].padStart(2,'0')}`;
   }
 
   // IGIC
@@ -2758,10 +2771,19 @@ function parseTicketText(raw) {
     if (kws.some(k => tl.includes(k))) { tipo = cat; break; }
   }
 
-  // Proveedor: primera línea no-numérica con texto significativo
-  const proveedor = lines.find(l => l.length >= 3 && !/^[\d\s€.,*\/\-]+$/.test(l)) || '';
+  // Proveedor: buscar nombre de empresa ignorando líneas de cabecera PDF/técnicas y datos del cliente
+  const SKIP_RX = /^%PDF|^<<|^stream|^endstream|^obj|^\d+ \d+ obj|^xref|^trailer|^startxref|bill to|receipt|invoice|payment|subtotal|amount|description|qty|unit price|date paid|visa|mastercard|paypal/i;
+  const proveedor = lines.find(l =>
+    l.length >= 3 &&
+    !/^[\d\s€.,*\/\-:%]+$/.test(l) &&
+    !SKIP_RX.test(l)
+  ) || '';
 
-  const descripcion = proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo;
+  // Descripción: usar proveedor o línea de descripción del artículo si se detecta
+  const itemLineM = text.match(/(?:description\s+qty[^\n]*\n\s*)(.+?)(?:\s{2,}|\t|\d)/i);
+  const descripcion = itemLineM
+    ? itemLineM[1].trim().slice(0, 60)
+    : (proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo);
 
   return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf };
 }
@@ -2774,30 +2796,43 @@ async function analyzeTicket() {
   const prog = $('ticketProgress');
   btn.disabled = true;
 
-  // Si es PDF: intentar extraer texto con FileReader (PDFs digitales) o guiar manualmente
+  // Si es PDF: extraer texto con PDF.js (funciona con PDFs digitales como facturas Stripe, Anthropic, etc.)
   if (file.type === 'application/pdf') {
     if (prog) { prog.style.display = ''; prog.textContent = 'Leyendo PDF…'; }
     try {
-      const text = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          // Extraer texto básico del PDF (solo funciona con PDFs de texto, no escaneados)
-          const arr = new Uint8Array(e.target.result);
-          let str = '';
-          for (let i = 0; i < arr.length; i++) {
-            const c = arr[i];
-            if (c >= 32 && c < 127) str += String.fromCharCode(c);
-            else if (c === 10 || c === 13) str += '\n';
-          }
-          res(str);
-        };
-        reader.onerror = rej;
-        reader.readAsArrayBuffer(file);
-      });
+      // Configurar worker de PDF.js
+      if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      let fullText = '';
+
+      if (typeof pdfjsLib !== 'undefined') {
+        // Extracción real de texto con PDF.js
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        for (let p = 1; p <= pdfDoc.numPages; p++) {
+          const page = await pdfDoc.getPage(p);
+          const content = await page.getTextContent();
+          fullText += content.items.map(i => i.str).join(' ') + '\n';
+        }
+      } else {
+        // Fallback: decodificar solo strings de texto del PDF (streams /BT…ET)
+        const arr = new Uint8Array(arrayBuffer);
+        let raw = '';
+        for (let i = 0; i < arr.length; i++) {
+          const c = arr[i];
+          if (c >= 32 && c < 127) raw += String.fromCharCode(c);
+          else if (c === 10 || c === 13) raw += '\n';
+        }
+        // Extraer solo contenido entre BT y ET (texto real del PDF)
+        const btBlocks = raw.match(/BT[\s\S]*?ET/g) || [];
+        fullText = btBlocks.map(b => b.replace(/BT|ET|\(|\)/g,'').replace(/\bTf\b|\bTd\b|\bTj\b|\bTJ\b|\bTm\b/g,' ')).join('\n') || raw;
+      }
 
       if (prog) prog.style.display = 'none';
-      const parsed = parseTicketText(text);
-      // Si no se extrajo importe, mostrar formulario vacío para relleno manual
+      const parsed = parseTicketText(fullText);
       if (!parsed.importe_total) {
         parsed.descripcion = file.name.replace('.pdf','').slice(0,60);
         toast('PDF cargado · revisa y completa los datos manualmente', false);
@@ -2806,7 +2841,7 @@ async function analyzeTicket() {
       showExtractedResult(parsed);
     } catch(err) {
       if (prog) prog.style.display = 'none';
-      toast('No se pudo leer el PDF automáticamente · rellena los datos', true);
+      toast('No se pudo leer el PDF · rellena los datos manualmente', true);
       _extractedTicket = { importe_total: null, fecha: null, descripcion: file.name.replace('.pdf','').slice(0,60), tipo: 'otros', proveedor: '', igic: 0, irpf: 0 };
       showExtractedResult(_extractedTicket);
     } finally {
