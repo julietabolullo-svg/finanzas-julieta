@@ -1572,12 +1572,10 @@ async function loadDashboard() {
   balEl.className = 'kpi-value ' + (bal >= 0 ? 'pos' : 'neg');
 
   // ── Balance real: descontando IGIC neto a pagar a Hacienda ──
-  // IGIC repercutido: 7% de las facturas emitidas este mes
-  const { data: factsM } = await db.from('facturas')
-    .select('base_imponible, iva_pct')
-    .gte('fecha', from).lte('fecha', to);
-  const igicRep = (factsM || []).reduce((s, f) =>
-    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+  // IGIC repercutido: calculado directamente de los ingresos visibles (7/107 del importe).
+  // Se usa el propio movimiento en lugar de la tabla facturas para evitar desincronías
+  // si el usuario borra movimientos sin borrar las facturas correspondientes.
+  const igicRep = ingresos.reduce((s, m) => s + (m.importe || 0) * 7 / 107, 0);
 
   // IGIC soportado: lo que pagaste de IGIC/IVA en tus gastos este mes (lo recuperas de Hacienda)
   const igicSop = gastos.reduce((s, m) => {
@@ -1631,16 +1629,9 @@ async function loadYearDash() {
     .select('tipo, importe, fecha, descripcion')
     .gte('fecha', from).lte('fecha', to);
 
-  // Todas las facturas del año (para IGIC repercutido)
-  const { data: facts } = await db
-    .from('facturas')
-    .select('base_imponible, iva_pct, fecha')
-    .gte('fecha', from).lte('fecha', to);
-
   $('yearLoading').style.display = 'none';
 
-  const allMovs   = movs  || [];
-  const allFacts  = facts || [];
+  const allMovs = movs || [];
 
   // Totales anuales
   const ingresos = allMovs.filter(m => m.tipo === 'ingreso');
@@ -1649,9 +1640,9 @@ async function loadYearDash() {
   const totGas   = gastos.reduce((s, m) => s + (m.importe || 0), 0);
   const balBruto = totIng - totGas;
 
-  // IGIC neto anual
-  const igicRep = allFacts.reduce((s, f) =>
-    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+  // IGIC neto anual — calculado desde movimientos (no facturas) para evitar desincronías
+  // IGIC repercutido = 7/107 de cada ingreso (Canarias 7%)
+  const igicRep = ingresos.reduce((s, m) => s + (m.importe || 0) * 7 / 107, 0);
   const igicSop = gastos.reduce((s, m) => {
     const { fiscal } = decGasto(m.descripcion);
     return s + (fiscal.igic || 0);
@@ -1691,9 +1682,9 @@ async function loadYearDash() {
                           .reduce((s, m) => s + (m.importe || 0), 0);
     const mBal  = mIng - mGas;
 
-    // IGIC mes
-    const mIgicRep = allFacts.filter(f => f.fecha >= mFrom && f.fecha <= mTo)
-                              .reduce((s, f) => s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+    // IGIC mes — desde movimientos directamente
+    const mIgicRep = allMovs.filter(m => m.tipo === 'ingreso' && m.fecha >= mFrom && m.fecha <= mTo)
+                             .reduce((s, m) => s + (m.importe || 0) * 7 / 107, 0);
     const mIgicSop = allMovs.filter(m => m.tipo === 'gasto' && m.fecha >= mFrom && m.fecha <= mTo)
                              .reduce((s, m) => { const { fiscal } = decGasto(m.descripcion); return s + (fiscal.igic || 0); }, 0);
     const mIrpf    = allMovs.filter(m => m.tipo === 'gasto' && m.fecha >= mFrom && m.fecha <= mTo)
