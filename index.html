@@ -2753,22 +2753,49 @@ function parseTicketText(raw) {
   const text = raw || '';
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
+  // ── MONEDA ───────────────────────────────────────────────────────────────
+  // Detectar moneda predominante: EUR > otras. Orden: símbolo antes de número.
+  const CURRENCY_MAP = {
+    '€': 'EUR', '$': 'USD', '£': 'GBP', '¥': 'JPY', '¥': 'CNY',
+    'USD': 'USD', 'EUR': 'EUR', 'GBP': 'GBP', 'CHF': 'CHF',
+    'MXN': 'MXN', 'ARS': 'ARS', 'CLP': 'CLP', 'COP': 'COP',
+    'JPY': 'JPY', 'CAD': 'CAD', 'AUD': 'AUD',
+  };
+  let detectedCurrency = 'EUR';
+  // Preferir moneda del símbolo más frecuente en el texto
+  const symCounts = { EUR: (text.match(/€/g)||[]).length, USD: (text.match(/\$/g)||[]).length, GBP: (text.match(/£/g)||[]).length };
+  for (const [code, kw] of [['USD','USD'],['GBP','GBP'],['CHF','CHF'],['CAD','CAD'],['AUD','AUD'],['JPY','JPY'],['MXN','MXN']]) {
+    if (new RegExp('\\b' + kw + '\\b').test(text)) { symCounts[code] = (symCounts[code]||0) + 10; }
+  }
+  // La moneda con más ocurrencias gana; EUR por defecto
+  const topCur = Object.entries(symCounts).sort((a,b)=>b[1]-a[1])[0];
+  if (topCur && topCur[1] > 0) detectedCurrency = topCur[0];
+
+  // Símbolo de búsqueda para esta moneda
+  const symRx = detectedCurrency === 'EUR' ? /[€]/ :
+                detectedCurrency === 'USD' ? /[$]/ :
+                detectedCurrency === 'GBP' ? /[£]/ : /[€$£]/;
+  const symStr = detectedCurrency === 'EUR' ? '€' :
+                 detectedCurrency === 'USD' ? '$' :
+                 detectedCurrency === 'GBP' ? '£' : '€';
+
   // ── IMPORTES ─────────────────────────────────────────────────────────────
   // 1) Buscar total explícito (Total, Amount paid, Subtotal, A pagar…)
-  const totalRx = /(?:total|amount paid|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*€?\s*(\d{1,6}[.,]\d{2})\s*€?/gi;
+  // Acepta cualquier símbolo de moneda
+  const totalRx = /(?:total|amount paid|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
   let explicitTotals = [];
   let m;
   while ((m = totalRx.exec(text)) !== null) {
     const v = parseFloat(m[1].replace(',','.'));
     if (v > 0) explicitTotals.push(v);
   }
-  // "€38.25 paid on …" o "paid … €38.25"
-  const paidM = text.match(/(?:amount paid|paid on[^€\d]*)[^€\d]*€?\s*(\d{1,6}[.,]\d{2})/i)
-             || text.match(/€\s*(\d{1,6}[.,]\d{2})\s+paid/i);
+  // "€/$38.25 paid on …" o "paid … €/$38.25"
+  const paidM = text.match(/(?:amount paid|paid on[^€$£\d]*)[^€$£\d]*[$€£]?\s*(\d{1,6}[.,]\d{2})/i)
+             || text.match(/[$€£]\s*(\d{1,6}[.,]\d{2})\s+paid/i);
   if (paidM) explicitTotals.push(parseFloat(paidM[1].replace(',','.')));
 
-  // 2) Todos los importes con símbolo € (candidatos a líneas de detalle)
-  const lineRx = /€\s*(\d{1,6}[.,]\d{2})|(\d{1,6}[.,]\d{2})\s*€/g;
+  // 2) Todos los importes con símbolo de moneda (candidatos a líneas de detalle)
+  const lineRx = /[$€£]\s*(\d{1,6}[.,]\d{2})|(\d{1,6}[.,]\d{2})\s*[$€£]/g;
   const lineAmounts = [];
   while ((m = lineRx.exec(text)) !== null) {
     const v = parseFloat((m[1]||m[2]).replace(',','.'));
@@ -2777,10 +2804,8 @@ function parseTicketText(raw) {
 
   let importe_total = null;
   if (explicitTotals.length) {
-    // Usar el total explícito más grande (evita coger subtotales parciales)
     importe_total = Math.max(...explicitTotals);
   } else if (lineAmounts.length > 1) {
-    // Sin total explícito y hay varios importes → sumarlos (PDF con múltiples gastos)
     importe_total = +lineAmounts.reduce((s,v) => s+v, 0).toFixed(2);
   } else if (lineAmounts.length === 1) {
     importe_total = lineAmounts[0];
@@ -2867,7 +2892,34 @@ function parseTicketText(raw) {
   // Indicar si el importe fue sumado de varios ítems
   const sumado = !explicitTotals.length && lineAmounts.length > 1;
 
-  return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf, sumado, nItems: lineAmounts.length };
+  return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf,
+           sumado, nItems: lineAmounts.length, currency: detectedCurrency };
+}
+
+// Caché de tasas para no repetir llamadas en la misma sesión
+const _fxCache = {};
+async function convertToEur(parsed) {
+  if (!parsed.importe_total || parsed.currency === 'EUR') return parsed;
+  const cur = parsed.currency;
+  try {
+    if (!_fxCache[cur]) {
+      const r = await fetch(`https://api.frankfurter.app/latest?from=${cur}&to=EUR`);
+      const j = await r.json();
+      _fxCache[cur] = j.rates?.EUR || null;
+    }
+    const rate = _fxCache[cur];
+    if (!rate) return parsed;
+    const original = parsed.importe_total;
+    parsed.importe_eur     = +(original * rate).toFixed(2);
+    parsed.importe_original = original;
+    parsed.fx_rate          = rate;
+    parsed.importe_total    = parsed.importe_eur;
+    parsed.fx_note          = `convertido de ${cur} ${original.toFixed(2)} (1 ${cur} = ${rate.toFixed(4)} €)`;
+  } catch(e) {
+    console.warn('FX conversion failed:', e);
+    parsed.fx_note = `moneda original: ${cur} — conversión no disponible`;
+  }
+  return parsed;
 }
 
 async function analyzeTicket() {
@@ -2914,7 +2966,8 @@ async function analyzeTicket() {
       }
 
       if (prog) prog.style.display = 'none';
-      const parsed = parseTicketText(fullText);
+      let parsed = parseTicketText(fullText);
+      parsed = await convertToEur(parsed);
       if (!parsed.importe_total) {
         parsed.descripcion = file.name.replace('.pdf','').slice(0,60);
         toast('PDF cargado · revisa y completa los datos manualmente', false);
@@ -2945,7 +2998,7 @@ async function analyzeTicket() {
 
     if (prog) prog.style.display = 'none';
     const texto = result.data.text;
-    _extractedTicket = parseTicketText(texto);
+    _extractedTicket = await convertToEur(parseTicketText(texto));
     showExtractedResult(_extractedTicket);
 
   } catch(err) {
@@ -2963,6 +3016,9 @@ function showExtractedResult(d) {
   const importeNote = d.sumado
     ? `<span style="color:var(--yellow);font-size:.65rem;margin-left:.4rem">∑ ${d.nItems} ítems sumados</span>`
     : '';
+  const fxNote = d.fx_note
+    ? `<div style="margin-top:.4rem;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--yellow)">💱 ${d.fx_note}</div>`
+    : '';
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-family:'DM Mono',monospace;font-size:.78rem">
       <div><span style="color:var(--muted)">Importe:</span> <strong style="color:var(--green)">${d.importe_total ? fmt(d.importe_total) : '—'}</strong>${importeNote}</div>
@@ -2973,6 +3029,7 @@ function showExtractedResult(d) {
       <div><span style="color:var(--muted)">IRPF:</span> ${d.irpf ? fmt(d.irpf) : '0,00 €'}</div>
     </div>
     <div style="margin-top:.5rem;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted)">Descripción: <span style="color:var(--text)">${d.descripcion || '—'}</span></div>
+    ${fxNote}
   `;
   $('ticketResult').style.display = '';
   $('btnAplicar').style.display = '';
