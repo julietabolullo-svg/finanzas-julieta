@@ -858,13 +858,19 @@
                 <label>Tipo de gasto</label>
                 <select id="movTipoGasto" onchange="onTipoGastoChange()">
                   <option value="">— Selecciona tipo —</option>
-                  <option value="herramientas_ia">🤖 Herramientas Agencia IA (IA · vídeo · audio · LLM)</option>
+                  <option value="herramientas_ia">🤖 Herramientas IA (IA · vídeo · audio · LLM)</option>
+                  <option value="herramientas_espacios">☁️ Espacios de trabajo y correo</option>
+                  <option value="proveedores">👤 Proveedores / Servicios externos</option>
+                  <option value="seguro_medico">🏥 Seguro médico</option>
+                  <option value="telefono">📱 Teléfono / Telecomunicaciones</option>
+                  <option value="tecnologia">💻 Tecnología / Equipos</option>
+                  <option value="gimnasio">🏋️ Gimnasio / Deporte</option>
                   <option value="gasolina">⛽ Gasolina / Combustible</option>
                   <option value="comidas">🍽️ Comida / Restauración</option>
                   <option value="transporte">🚗 Transporte / Viaje</option>
                   <option value="materiales">📦 Materiales y papelería</option>
                   <option value="publicidad">📢 Publicidad / Marketing</option>
-                  <option value="autonomo">📄 Factura autónomo (IRPF retención)</option>
+                  <option value="autonomo">📄 Cuota autónomo / TGSS</option>
                   <option value="otros">Otros gastos</option>
                 </select>
               </div>
@@ -1910,10 +1916,21 @@ function renderBreakdowns(ingresos, gastos) {
   });
   // Gastos: usa categoría Supabase si hay; si no, tipo_gasto de la descripción codificada
   const TIPO_LABEL = {
-    herramientas_ia:'🤖 Herramientas Agencia IA',
-    gasolina:'⛽ Gasolina', herramientas:'🔧 Herramientas', comidas:'🍽️ Comida',
-    materiales:'📦 Materiales', software:'💻 Software', transporte:'🚗 Transporte/Viaje',
-    publicidad:'📢 Publicidad', autonomo:'📄 Autónomo', otros:'Otros',
+    herramientas_ia:      '🤖 Herramientas IA',
+    herramientas_espacios:'☁️ Espacios y correo',
+    proveedores:          '👤 Proveedores',
+    seguro_medico:        '🏥 Seguro médico',
+    telefono:             '📱 Teléfono',
+    tecnologia:           '💻 Tecnología',
+    gimnasio:             '🏋️ Gimnasio',
+    gasolina:             '⛽ Gasolina',
+    herramientas:         '🔧 Herramientas',
+    comidas:              '🍽️ Comida',
+    materiales:           '📦 Materiales',
+    transporte:           '🚗 Transporte/Viaje',
+    publicidad:           '📢 Publicidad',
+    autonomo:             '📄 Cuota autónomo',
+    otros:                'Otros',
   };
   const gastoKey = m => {
     if (m.categorias?.nombre) return m.categorias.nombre;
@@ -2908,13 +2925,22 @@ function parseTicketText(raw) {
   // Categoría por palabras clave
   const tl = text.toLowerCase();
   const CATS = [
-    ['gasolina',        ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
-    ['comidas',         ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú','menú del dia','bar ','comida']],
-    ['herramientas_ia', ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','ia ','inteligencia artificial','vídeo','video edicion','audio','podcast','descript','kling','heygen','elevenlabs','higgsfield','sora','pika','luma','synthesia']],
-    ['herramientas',    ['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
-    ['materiales',      ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','material','impresion','toner']],
-    ['transporte',      ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte','airbnb','hotel','alojamiento']],
-    ['publicidad',      ['meta ads','google ads','publicidad','marketing','imprenta','diseño']],
+    // ── Categorías específicas primero (prioridad sobre las genéricas) ─────────
+    ['seguro_medico',       ['hermandad nac','hermandad de arq','hna ','hna,','seguro salud','seguro médico','seguro medico','sanitas','adeslas','asisa','mapfre salud','cigna','allianz salud','segurcaixa salud']],
+    ['proveedores',         ['servicios prestados','servicios profesionales','honorarios profesional','consultoría profesional','consultoria profesional','asesoría','asesoria','anna castells','freelance']],
+    ['telefono',            ['yoigo','movistar','orange telecomunicaciones','vodafone','jazztel','pepephone','digi ','masmovil','llamaya','simyo','lowi','telecomunicaciones']],
+    ['tecnologia',          ['apple store','fnac','mediamarkt','pccomponentes','worten','amazon.es','samsung store','iphone','ipad','macbook','ordenador portátil','ordenador portatil','auricular','cable usb','cargador inalambrico','disco duro externo']],
+    ['gimnasio',            ['360 gimnasio','360gimnasio','gimnasio','crossfit','pilates','yoga studio','fitness']],
+    ['herramientas_ia',     ['openai','anthropic','claude','chatgpt','midjourney','runway','capcut','adobe','premiere','davinci','resolve','audacity','notion','canva','figma','llm','inteligencia artificial','descript','kling','heygen','elevenlabs','higgsfield','sora','pika','luma','synthesia']],
+    ['herramientas_espacios',['workspace','google workspace','google drive','gmail','microsoft 365','office 365','dropbox','onedrive','slack','zoom ','teams','hosting','dominio web','godaddy','namecheap','cloudflare','mailerlite','mailchimp','brevo','sendinblue','ionos','hostinger','cpanel']],
+    // ── Categorías generales ──────────────────────────────────────────────────
+    ['gasolina',            ['gasolinera','combustible','gasolina','gasóleo','gasoleo','bp ','repsol','cepsa','shell','disa','petronor','estación de servicio']],
+    ['comidas',             ['restaurante','cafetería','cafeteria','hamburgues','pizzer','sushi','almuerzo','menú del dia','comida']],
+    ['herramientas',        ['ferretería','ferreteria','leroy merlin','bricomart','bricoking','herramienta','tornillo']],
+    ['materiales',          ['papelería','papeleria','carrefour','mercadona','el corte inglés','hiperdino','impresion','toner']],
+    ['transporte',          ['renfe','vueling','iberia','ryanair','easyjet','cabify','uber','taxi','peaje','autobus','metro','bono de transporte','airbnb','hotel','alojamiento']],
+    ['publicidad',          ['meta ads','google ads','publicidad','marketing','imprenta','diseño']],
+    ['autonomo',            ['cuota autónomo','cuota autonomo','tgss','tesorería general','tesoreria general','reta ','recibo autónomo','recibo autonomo']],
   ];
   let tipo = 'otros';
   for (const [cat, kws] of CATS) {
