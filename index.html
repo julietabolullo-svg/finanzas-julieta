@@ -2782,7 +2782,8 @@ function parseTicketText(raw) {
   // ── IMPORTES ─────────────────────────────────────────────────────────────
   // 1) Buscar total explícito (Total, Amount paid, Subtotal, A pagar…)
   // Acepta cualquier símbolo de moneda
-  const totalRx = /(?:total|amount paid|amount due|grand total|importe total|a\s*pagar|cobrado|pagado|net total)\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
+  // \b word-boundary prevents matching "SUBTOTAL" as "total"; añadimos "importe liquido"
+  const totalRx = /\b(?:total|amount paid|amount due|grand total|importe total|importe\s+l[ií]quido|a\s*pagar|cobrado|pagado|net total)\b\s*:?\s*[$€£]?\s*(\d{1,6}[.,]\d{2})\s*[$€£]?/gi;
   let explicitTotals = [];
   let m;
 
@@ -2841,6 +2842,18 @@ function parseTicketText(raw) {
     importe_total = lineAmounts[0];
   }
 
+  // Fallback: "IMPORTE LIQUIDO" separado del número (tabla de 2 columnas, p.ej. Impuestos Multinivel)
+  // Busca el primer número XX,XX que aparezca después de la etiqueta, ignorando el IBAN intermedio
+  if (!importe_total) {
+    const ilM = text.match(/importe\s+l[ií]quido.{0,400}?(\d{1,6}[.,]\d{2})/i);
+    if (ilM) importe_total = parseFloat(ilM[1].replace(',', '.'));
+  }
+  // Fallback 2: "HONORARIOS XX,XX" sin símbolo € (algunas facturas de gestoría)
+  if (!importe_total) {
+    const honM = text.match(/honorarios\s+(\d{1,6}[.,]\d{2})/i);
+    if (honM) importe_total = parseFloat(honM[1].replace(',', '.'));
+  }
+
   // ── FECHA ─────────────────────────────────────────────────────────────────
   const MONTHS_ES = { enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12 };
   const MONTHS_EN = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
@@ -2888,8 +2901,8 @@ function parseTicketText(raw) {
     igic = igicM ? parseFloat(igicM[1].replace(',', '.')) : 0;
   }
 
-  // IRPF
-  const irpfM = text.match(/irpf[^0-9]*(\d{1,4}[.,]\d{2})/i);
+  // IRPF — admite "IRPF 15% €114,00" (porcentaje antes del importe) y "IRPF: 50,00"
+  const irpfM = text.match(/irpf(?:[^€$£\d]|\d+\s*%)*[$€£]?\s*(\d{1,4}[.,]\d{2})/i);
   const irpf = irpfM ? parseFloat(irpfM[1].replace(',', '.')) : 0;
 
   // Categoría por palabras clave
