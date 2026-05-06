@@ -2915,10 +2915,10 @@ function parseTicketText(raw) {
     igicMulti = igicLines.length ? igicLines[0] : 0;
   } else if (explicitTotals.length) {
     importe_total = Math.max(...explicitTotals);
-  } else if (lineAmounts.length > 1) {
-    importe_total = +lineAmounts.reduce((s,v) => s+v, 0).toFixed(2);
-  } else if (lineAmounts.length === 1) {
-    importe_total = lineAmounts[0];
+  } else if (lineAmounts.length >= 1) {
+    // NUNCA sumar todos los importes de una sola factura — coger el mayor.
+    // La suma explícita solo se hace cuando hay múltiples "Total Factura:" (caso AVON arriba).
+    importe_total = Math.max(...lineAmounts);
   }
 
   // Fallback: "IMPORTE LIQUIDO" separado del número (tabla 2 columnas, ej. Impuestos Multinivel)
@@ -3038,7 +3038,7 @@ function parseTicketText(raw) {
     : (proveedor ? proveedor.split(/\s{2,}/)[0].slice(0, 60) : tipo);
 
   // Indicar si el importe fue sumado de varios facturas/ítems
-  const sumado = facturaTotals.length > 1 || (!explicitTotals.length && !facturaTotals.length && lineAmounts.length > 1);
+  const sumado = facturaTotals.length > 1; // solo se indica cuando hay varias facturas explícitas
   const nItems = facturaTotals.length > 1 ? facturaTotals.length : lineAmounts.length;
 
   return { importe_total, fecha, descripcion, tipo, proveedor, igic, irpf,
