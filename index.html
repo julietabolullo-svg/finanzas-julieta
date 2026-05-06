@@ -861,6 +861,7 @@
                   <option value="herramientas_ia">🤖 Herramientas IA (IA · vídeo · audio · LLM)</option>
                   <option value="herramientas_espacios">☁️ Espacios de trabajo y correo</option>
                   <option value="proveedores">👤 Proveedores / Servicios externos</option>
+                  <option value="gestor_impuestos">🧾 Gestor / Asesoría fiscal</option>
                   <option value="seguro_medico">🏥 Seguro médico</option>
                   <option value="telefono">📱 Teléfono / Telecomunicaciones</option>
                   <option value="tecnologia">💻 Tecnología / Equipos</option>
@@ -1916,6 +1917,7 @@ function renderBreakdowns(ingresos, gastos) {
   });
   // Gastos: usa categoría Supabase si hay; si no, tipo_gasto de la descripción codificada
   const TIPO_LABEL = {
+    gestor_impuestos:     '🧾 Gestor/Asesoría fiscal',
     herramientas_ia:      '🤖 Herramientas IA',
     herramientas_espacios:'☁️ Espacios y correo',
     proveedores:          '👤 Proveedores',
@@ -2859,16 +2861,29 @@ function parseTicketText(raw) {
     importe_total = lineAmounts[0];
   }
 
-  // Fallback: "IMPORTE LIQUIDO" separado del número (tabla de 2 columnas, p.ej. Impuestos Multinivel)
-  // Busca el primer número XX,XX que aparezca después de la etiqueta, ignorando el IBAN intermedio
+  // Fallback: "IMPORTE LIQUIDO" separado del número (tabla 2 columnas, ej. Impuestos Multinivel)
   if (!importe_total) {
-    const ilM = text.match(/importe\s+l[ií]quido.{0,400}?(\d{1,6}[.,]\d{2})/i);
+    const ilM = text.match(/importe\s+l[ií]quido[\s\S]{0,400}?(\d{1,6}[.,]\d{2})/i);
     if (ilM) importe_total = parseFloat(ilM[1].replace(',', '.'));
   }
-  // Fallback 2: "HONORARIOS XX,XX" sin símbolo € (algunas facturas de gestoría)
+  // Fallback 2: "HONORARIOS XX,XX" (gestorías sin símbolo €)
   if (!importe_total) {
     const honM = text.match(/honorarios\s+(\d{1,6}[.,]\d{2})/i);
     if (honM) importe_total = parseFloat(honM[1].replace(',', '.'));
+  }
+  // Fallback 3: número que más se repite (facturas tipo gestoría sin símbolo €)
+  // Un importe que aparece varias veces en distintas columnas de tabla es el total real
+  if (!importe_total) {
+    const numRx = /\b(\d{1,6}[.,]\d{2})\b/g;
+    const freq = {};
+    let nf;
+    while ((nf = numRx.exec(text)) !== null) {
+      const v = nf[1];
+      const n = parseFloat(v.replace(',','.'));
+      if (n >= 5) freq[v] = (freq[v]||0) + 1;
+    }
+    const best = Object.entries(freq).filter(([,c]) => c >= 2).sort((a,b) => b[1]-a[1])[0];
+    if (best) importe_total = parseFloat(best[0].replace(',','.'));
   }
 
   // ── FECHA ─────────────────────────────────────────────────────────────────
@@ -2926,6 +2941,7 @@ function parseTicketText(raw) {
   const tl = text.toLowerCase();
   const CATS = [
     // ── Categorías específicas primero (prioridad sobre las genéricas) ─────────
+    ['gestor_impuestos',    ['impuestos multinivel','gestoria fiscal','gestoría fiscal','asesor fiscal','asesoría fiscal','asesoria fiscal','declaracion renta','declaración renta','modelo 130','modelo 303','modelo 390','modelo 347','agencia tributaria','aeat ','presentacion libros','presentación libros','honor presentación']],
     ['seguro_medico',       ['hermandad nac','hermandad de arq','hna ','hna,','seguro salud','seguro médico','seguro medico','sanitas','adeslas','asisa','mapfre salud','cigna','allianz salud','segurcaixa salud']],
     ['proveedores',         ['servicios prestados','servicios profesionales','honorarios profesional','consultoría profesional','consultoria profesional','asesoría','asesoria','anna castells','freelance']],
     ['telefono',            ['yoigo','movistar','orange telecomunicaciones','vodafone','jazztel','pepephone','digi ','masmovil','llamaya','simyo','lowi','telecomunicaciones']],
