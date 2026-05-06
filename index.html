@@ -2012,7 +2012,21 @@ $('movForm').addEventListener('submit', async e => {
   $('movImporte').value = '';
   $('movDesc').value = '';
   clearGastoFiscalForm();
-  toast('Movimiento guardado ✓');
+
+  // Navegar al mes de la fecha guardada (puede diferir del mes actual en pantalla)
+  if (mov.fecha) {
+    const [fy, fm] = mov.fecha.split('-').map(Number);
+    if (fy !== curYear || (fm - 1) !== curMonth) {
+      curYear  = fy;
+      curMonth = fm - 1;
+      updateMonthDisplay();
+      toast(`Movimiento guardado ✓ — navegando a ${MESES[curMonth]} ${curYear}`);
+    } else {
+      toast('Movimiento guardado ✓');
+    }
+  } else {
+    toast('Movimiento guardado ✓');
+  }
   loadDashboard();
 });
 
