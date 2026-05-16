@@ -430,6 +430,13 @@
     .badge-pendiente  { background: rgba(241,196,15,.12);  color: var(--yellow); }
     .badge-pagada     { background: rgba(111,207,151,.12); color: var(--green); }
     .badge-cancelada  { background: rgba(235,87,87,.12);   color: var(--red); }
+    .badge-borrador   { background: rgba(148,163,184,.12); color: #94a3b8; }
+    .badge-enviado    { background: rgba(241,196,15,.12);  color: var(--yellow); }
+    .badge-aceptado   { background: rgba(111,207,151,.12); color: var(--green); }
+    .badge-rechazado  { background: rgba(235,87,87,.12);   color: var(--red); }
+    .regimen-toggle { display:flex; gap:.4rem; margin-bottom:1rem; }
+    .regimen-btn { flex:1; padding:.45rem; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--muted); font-family:'DM Mono',monospace; font-size:.73rem; cursor:pointer; text-align:center; transition:all .2s; }
+    .regimen-btn.active { border-color:var(--accent); background:rgba(139,92,246,.15); color:var(--accent); }
 
     /* ── MODAL ──────────────────────────────────────── */
     .overlay {
@@ -721,6 +728,7 @@
   <nav class="tabs">
     <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn" data-tab="facturas">Facturas</button>
+    <button class="tab-btn" data-tab="presupuestos">Presupuestos</button>
     <button class="tab-btn" data-tab="hacienda">Hacienda</button>
   </nav>
 </header>
@@ -1045,6 +1053,42 @@
 
   </section>
 
+  <!-- ═══════════════ PRESUPUESTOS ═══════════════ -->
+  <section class="tab-pane" id="tab-presupuestos">
+
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--sand)">Presupuestos</div>
+      <select id="presYearSel" style="width:auto;min-width:90px" onchange="loadPresupuestos()"></select>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total presupuestado</div>
+        <div class="kpi-value acc" id="pKpiTotal">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Aceptados</div>
+        <div class="kpi-value pos" id="pKpiAcept">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pendientes de respuesta</div>
+        <div class="kpi-value warn" id="pKpiEnv">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Rechazados</div>
+        <div class="kpi-value neg" id="pKpiRech">—</div>
+      </div>
+    </div>
+
+    <div class="sect-head">
+      <div class="sect-title">Presupuestos</div>
+      <button class="btn btn-primary" id="btnNuevoPres">+ Nuevo presupuesto</button>
+    </div>
+
+    <div id="presList"><div class="loading">Cargando presupuestos...</div></div>
+
+  </section>
+
   <!-- ═══════════════ HACIENDA ═══════════════ -->
   <section class="tab-pane" id="tab-hacienda">
 
@@ -1179,6 +1223,104 @@
       </div>
 
       <button type="submit" class="btn btn-primary btn-full">Crear factura</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL: PRESUPUESTO ═══════════════ -->
+<div class="overlay hidden" id="overlayPres">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="presModalTitle">Nuevo presupuesto</div>
+      <button class="modal-close" data-close="overlayPres">&times;</button>
+    </div>
+
+    <form id="presForm">
+      <input type="hidden" id="editPresId">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Número</label>
+          <input type="text" id="pNum" readonly>
+        </div>
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="pFecha" required>
+        </div>
+        <div class="form-group">
+          <label>Válido hasta</label>
+          <input type="date" id="pValidez">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="pClienteSel" onchange="handlePresClienteSel()">
+          <option value="avon">AVON COSMETICS S.A.U.</option>
+          <option value="xpertia">Xpertia Wimax Communications S.L.</option>
+          <option value="metropolis">Metropolis Comunicación SL</option>
+          <option value="elcorreo">DIARIO EL CORREO S.A.</option>
+          <option value="otro">Otro...</option>
+        </select>
+      </div>
+
+      <div id="pClienteManual" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre / Razón social</label>
+            <input type="text" id="pCliNom" placeholder="Nombre del cliente">
+          </div>
+          <div class="form-group">
+            <label>NIF / CIF</label>
+            <input type="text" id="pCliNif" placeholder="B12345678">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Dirección</label>
+          <input type="text" id="pCliDir" placeholder="Dirección completa">
+        </div>
+      </div>
+
+      <!-- Régimen fiscal -->
+      <div class="form-group">
+        <label>Régimen fiscal</label>
+        <div class="regimen-toggle">
+          <button type="button" class="regimen-btn active" id="regimenIgic" onclick="setRegimen('igic')">🏝️ Canarias — IGIC 7%</button>
+          <button type="button" class="regimen-btn" id="regimenSin" onclick="setRegimen('sin_impuesto')">🇪🇸 Península — Sin impuesto</button>
+        </div>
+        <input type="hidden" id="pRegimen" value="igic">
+      </div>
+
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="pEstado">
+          <option value="borrador">Borrador</option>
+          <option value="enviado">Enviado</option>
+          <option value="aceptado">Aceptado</option>
+          <option value="rechazado">Rechazado</option>
+        </select>
+      </div>
+
+      <hr class="divider">
+      <div style="font-family:'Playfair Display',serif;font-size:.9rem;color:var(--sand);margin-bottom:.7rem">Conceptos</div>
+
+      <div id="presConceptosCont"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnAddPresConcepto" style="margin-bottom:1rem">+ Añadir línea</button>
+
+      <hr class="divider">
+
+      <div class="totals-box">
+        <div class="totals-row"><span class="t-label">Base imponible</span><span id="ppBase">0,00 €</span></div>
+        <div class="totals-row" id="ppIgicRow"><span class="t-label">IGIC (7%)</span><span id="ppIgic">0,00 €</span></div>
+        <div class="totals-row final"><span class="t-label">TOTAL</span><span class="t-value" id="ppTotal">0,00 €</span></div>
+      </div>
+
+      <div class="form-group">
+        <label>Notas / Condiciones</label>
+        <textarea id="pNotas" rows="3"></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" id="presSubmitBtn">Crear presupuesto</button>
     </form>
   </div>
 </div>
@@ -1427,6 +1569,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     $('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'facturas') { initFactYearSel(); loadFacturas(); }
+    if (btn.dataset.tab === 'presupuestos') { initPresYearSel(); loadPresupuestos(); }
     if (btn.dataset.tab === 'hacienda') { updateQDisplay(); loadHacienda(); }
   });
 });
@@ -2645,6 +2788,302 @@ function clearGastoFiscalForm() {
 }
 
 /* ════════════════════════════════════════════════════
+   PRESUPUESTOS
+   SQL needed in Supabase:
+   CREATE TABLE presupuestos (
+     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+     numero TEXT NOT NULL, fecha DATE NOT NULL,
+     fecha_validez DATE, cliente_nombre TEXT NOT NULL,
+     cliente_nif TEXT DEFAULT '', cliente_direccion TEXT DEFAULT '',
+     conceptos JSONB DEFAULT '[]', base_imponible NUMERIC DEFAULT 0,
+     regimen TEXT DEFAULT 'igic', igic_pct NUMERIC DEFAULT 7,
+     total NUMERIC DEFAULT 0, estado TEXT DEFAULT 'borrador',
+     factura_id UUID, notas TEXT DEFAULT '',
+     created_at TIMESTAMPTZ DEFAULT NOW()
+   );
+════════════════════════════════════════════════════ */
+const _presCache = {};
+
+function initPresYearSel() {
+  const sel = $('presYearSel');
+  if (!sel) return;
+  const cur = new Date().getFullYear();
+  sel.innerHTML = [cur, cur-1, cur-2].map(y =>
+    `<option value="${y}"${y === cur ? ' selected' : ''}>${y}</option>`
+  ).join('') + '<option value="all">Todos</option>';
+}
+
+async function loadPresupuestos() {
+  const yearSel = $('presYearSel')?.value || String(new Date().getFullYear());
+  let q = db.from('presupuestos').select('*').order('fecha', { ascending: false });
+  if (yearSel !== 'all') q = q.gte('fecha', `${yearSel}-01-01`).lte('fecha', `${yearSel}-12-31`);
+  const { data, error } = await q;
+  if (error) { toast('Error cargando presupuestos', true); return; }
+  data.forEach(p => _presCache[p.id] = p);
+
+  const total  = data.reduce((s, p) => s + (p.total || 0), 0);
+  const acept  = data.filter(p => p.estado === 'aceptado').reduce((s, p) => s + (p.total || 0), 0);
+  const env    = data.filter(p => p.estado === 'enviado').reduce((s, p) => s + (p.total || 0), 0);
+  const rech   = data.filter(p => p.estado === 'rechazado').reduce((s, p) => s + (p.total || 0), 0);
+
+  $('pKpiTotal').textContent = fmt(total);
+  $('pKpiAcept').textContent = fmt(acept);
+  $('pKpiEnv').textContent   = fmt(env);
+  $('pKpiRech').textContent  = fmt(rech);
+
+  const container = $('presList');
+  if (!data.length) {
+    container.innerHTML = `<div class="empty">Sin presupuestos en ${yearSel === 'all' ? 'toda la historia' : yearSel}</div>`;
+    return;
+  }
+
+  container.innerHTML = data.map(p => `
+    <div class="inv-item" data-id="${p.id}">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditPresupuesto('${p.id}')">
+        <div class="inv-num">${p.numero}</div>
+        <div class="inv-cli">${p.cliente_nombre}</div>
+        <div class="inv-date">${fmtD(p.fecha)}${p.fecha_validez ? ' · válido hasta ' + fmtD(p.fecha_validez) : ''}</div>
+      </div>
+      <div class="inv-right" style="align-items:flex-end;gap:.4rem">
+        <div class="inv-total">${fmt(p.total)}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted)">${p.regimen === 'igic' ? 'IGIC 7%' : 'Sin impuesto'}</div>
+        <span class="badge badge-${p.estado}">${p.estado}</span>
+        ${p.estado === 'aceptado' && !p.factura_id
+          ? `<button class="btn btn-sm" style="background:rgba(139,92,246,.15);color:var(--accent);border:1px solid rgba(139,92,246,.3);margin-top:.2rem" onclick="event.stopPropagation();convertirAFactura('${p.id}')">→ Factura</button>`
+          : (p.factura_id ? `<span style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--green)">✓ Convertido</span>` : '')}
+        <button class="btn-icon" onclick="event.stopPropagation();openEditPresupuesto('${p.id}')" title="Editar">✏️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function nextPresNum() {
+  const { data } = await db.from('presupuestos').select('numero').order('created_at', { ascending: false }).limit(1);
+  const y = new Date().getFullYear();
+  if (!data || !data.length) return `PRES-${y}-001`;
+  const match = (data[0].numero || '').match(/PRES-(\d+)-(\d+)/);
+  if (!match) return `PRES-${y}-001`;
+  if (parseInt(match[1]) < y) return `PRES-${y}-001`;
+  return `PRES-${y}-${String(parseInt(match[2]) + 1).padStart(3,'0')}`;
+}
+
+function setRegimen(r) {
+  $('pRegimen').value = r;
+  $('regimenIgic').classList.toggle('active', r === 'igic');
+  $('regimenSin').classList.toggle('active', r === 'sin_impuesto');
+  $('ppIgicRow').style.display = r === 'igic' ? '' : 'none';
+  calcPresTotals();
+}
+
+function calcPresTotals() {
+  const rows = Array.from(document.querySelectorAll('.pc-row'));
+  const base = rows.reduce((s, row) => {
+    const u = parseFloat(row.querySelector('.pc-u').value) || 0;
+    const p = parseFloat(row.querySelector('.pc-p').value) || 0;
+    return s + u * p;
+  }, 0);
+  const regimen = $('pRegimen')?.value || 'igic';
+  const igic  = regimen === 'igic' ? base * 0.07 : 0;
+  const total = base + igic;
+  $('ppBase').textContent  = fmt(base);
+  $('ppIgic').textContent  = fmt(igic);
+  $('ppTotal').textContent = fmt(total);
+}
+
+let presConceptN = 0;
+function addPresConceptoRow(desc = '', uds = 1, precio = '') {
+  presConceptN++;
+  const n = presConceptN;
+  const row = document.createElement('div');
+  row.className = 'concept-row pc-row';
+  row.id = 'pcr-' + n;
+  row.innerHTML = `
+    <div><label>Descripción</label>
+      <input type="text" class="pc-d" placeholder="Concepto..." value="${desc}" oninput="calcPresTotals()"></div>
+    <div><label>Uds.</label>
+      <input type="number" class="pc-u" value="${uds}" step="0.01" min="0" oninput="calcPresTotals()"></div>
+    <div><label>€/ud</label>
+      <input type="number" class="pc-p" value="${precio}" step="0.01" min="0" placeholder="0.00" oninput="calcPresTotals()"></div>
+    <button type="button" class="btn-rm" onclick="rmPresConcepto(${n})">×</button>
+  `;
+  $('presConceptosCont').appendChild(row);
+  calcPresTotals();
+}
+
+function rmPresConcepto(n) {
+  const el = $('pcr-' + n);
+  if (el) { el.remove(); calcPresTotals(); }
+}
+
+function getPresConceptos() {
+  return Array.from(document.querySelectorAll('.pc-row')).map(row => {
+    const u = parseFloat(row.querySelector('.pc-u').value) || 0;
+    const p = parseFloat(row.querySelector('.pc-p').value) || 0;
+    return { descripcion: row.querySelector('.pc-d').value, unidades: u, precio_ud: p, total: +(u * p).toFixed(2) };
+  }).filter(c => c.descripcion || c.total);
+}
+
+function handlePresClienteSel() {
+  const val = $('pClienteSel').value;
+  if (val.startsWith('db_')) {
+    const found = clis.find(c => String(c.id) === val.replace('db_', ''));
+    $('pClienteManual').style.display = '';
+    if (found) { $('pCliNom').value = found.nombre; $('pCliNif').value = found.nif || ''; $('pCliDir').value = found.direccion || ''; }
+  } else {
+    const cli = CLI_PREDEFINED[val];
+    const show = !cli || !cli.nombre || val === 'otro';
+    $('pClienteManual').style.display = show ? '' : 'none';
+    if (cli && cli.nombre) {
+      $('pCliNom').value = cli.nombre; $('pCliNif').value = cli.nif; $('pCliDir').value = cli.dir;
+    } else {
+      $('pCliNom').value = ''; $('pCliNif').value = ''; $('pCliDir').value = '';
+    }
+  }
+}
+
+async function openEditPresupuesto(id) {
+  const p = _presCache[id];
+  if (!p) { toast('No se pudo cargar el presupuesto', true); return; }
+
+  $('editPresId').value = p.id;
+  $('presModalTitle').textContent = 'Editar presupuesto';
+  $('presSubmitBtn').textContent = 'Guardar cambios';
+  $('pNum').value    = p.numero;
+  $('pFecha').value  = p.fecha;
+  $('pValidez').value = p.fecha_validez || '';
+  $('pEstado').value = p.estado;
+  $('pNotas').value  = p.notas || '';
+  setRegimen(p.regimen || 'igic');
+
+  const cliKey = Object.keys(CLI_PREDEFINED).find(k => CLI_PREDEFINED[k].nombre === p.cliente_nombre);
+  if (cliKey && cliKey !== 'otro') {
+    $('pClienteSel').value = cliKey;
+    $('pClienteManual').style.display = 'none';
+  } else {
+    $('pClienteSel').value = 'otro';
+    $('pClienteManual').style.display = '';
+    $('pCliNom').value = p.cliente_nombre || '';
+    $('pCliNif').value = p.cliente_nif || '';
+    $('pCliDir').value = p.cliente_direccion || '';
+  }
+
+  $('presConceptosCont').innerHTML = '';
+  presConceptN = 0;
+  (p.conceptos || []).forEach(c => addPresConceptoRow(c.descripcion, c.unidades, c.precio_ud));
+  if (!p.conceptos?.length) addPresConceptoRow();
+  openM('overlayPres');
+}
+
+$('btnNuevoPres').addEventListener('click', async () => {
+  $('editPresId').value = '';
+  $('presModalTitle').textContent = 'Nuevo presupuesto';
+  $('presSubmitBtn').textContent = 'Crear presupuesto';
+  $('pNum').value = await nextPresNum();
+  $('pFecha').valueAsDate = new Date();
+  const v = new Date(); v.setDate(v.getDate() + 30);
+  $('pValidez').valueAsDate = v;
+  $('pEstado').value = 'borrador';
+  $('presConceptosCont').innerHTML = '';
+  presConceptN = 0;
+  addPresConceptoRow();
+  setRegimen('igic');
+  $('pClienteSel').value = 'avon';
+  handlePresClienteSel();
+  $('pNotas').value = `Datos de pago:\nIBAN: ${ME.iban}\n\nEste presupuesto es válido durante 30 días desde la fecha de emisión.\n\nGracias por su confianza.`;
+  openM('overlayPres');
+});
+
+$('btnAddPresConcepto').addEventListener('click', () => addPresConceptoRow());
+
+$('presForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const sel = $('pClienteSel').value;
+  let cliNom, cliNif, cliDir;
+  if (CLI_PREDEFINED[sel]) {
+    ({ nombre: cliNom, nif: cliNif, dir: cliDir } = CLI_PREDEFINED[sel]);
+    if (!cliNom) { cliNom = $('pCliNom').value.trim(); cliNif = $('pCliNif').value.trim(); cliDir = $('pCliDir').value.trim(); }
+  } else {
+    cliNom = $('pCliNom').value.trim(); cliNif = $('pCliNif').value.trim(); cliDir = $('pCliDir').value.trim();
+  }
+  if (!cliNom) { toast('Indica el nombre del cliente', true); return; }
+  const conceptos = getPresConceptos();
+  if (!conceptos.length) { toast('Añade al menos un concepto', true); return; }
+
+  const base    = +conceptos.reduce((s, c) => s + c.total, 0).toFixed(2);
+  const regimen = $('pRegimen').value;
+  const igic    = regimen === 'igic' ? +(base * 0.07).toFixed(2) : 0;
+  const total   = +(base + igic).toFixed(2);
+
+  const presData = {
+    numero:             $('pNum').value,
+    fecha:              $('pFecha').value,
+    fecha_validez:      $('pValidez').value || null,
+    cliente_nombre:     cliNom,
+    cliente_nif:        cliNif || '',
+    cliente_direccion:  cliDir || '',
+    conceptos,
+    base_imponible:     base,
+    regimen,
+    igic_pct:           regimen === 'igic' ? 7 : 0,
+    total,
+    estado:             $('pEstado').value,
+    notas:              $('pNotas').value,
+  };
+
+  const editId = $('editPresId').value;
+  if (editId) {
+    const { error } = await db.from('presupuestos').update(presData).eq('id', editId);
+    if (error) { toast('Error: ' + error.message, true); return; }
+    toast('Presupuesto actualizado ✓');
+  } else {
+    const { error } = await db.from('presupuestos').insert(presData);
+    if (error) { toast('Error: ' + error.message, true); return; }
+    toast('Presupuesto creado ✓');
+  }
+  closeM('overlayPres');
+  loadPresupuestos();
+});
+
+async function convertirAFactura(presId) {
+  const p = _presCache[presId];
+  if (!p) return;
+  if (!confirm(`¿Convertir presupuesto ${p.numero} a factura?`)) return;
+
+  const numFac = await nextInvoiceNum();
+  const base   = p.base_imponible || 0;
+  const igic   = p.regimen === 'igic' ? +(base * 0.07).toFixed(2) : 0;
+  const irpf   = 0;
+  const total  = +(base + igic - irpf).toFixed(2);
+
+  const factData = {
+    numero:            numFac,
+    fecha:             new Date().toISOString().slice(0,10),
+    cliente_nombre:    p.cliente_nombre,
+    cliente_nif:       p.cliente_nif || '',
+    cliente_direccion: p.cliente_direccion || '',
+    conceptos:         p.conceptos || [],
+    base_imponible:    base,
+    iva_pct:           p.regimen === 'igic' ? 7 : 0,
+    irpf_pct:          0,
+    total,
+    estado:            'pendiente',
+    notas:             p.notas || '',
+  };
+
+  const { data: fac, error } = await db.from('facturas').insert(factData).select('id').single();
+  if (error) { toast('Error creando factura: ' + error.message, true); return; }
+
+  await db.from('presupuestos').update({ factura_id: fac.id, estado: 'aceptado' }).eq('id', presId);
+
+  const movDesc = numFac + ' · ' + p.cliente_nombre;
+  await db.from('movimientos').insert({ tipo: 'ingreso', bloque: 'empresa', fecha: factData.fecha, importe: total, descripcion: movDesc });
+
+  toast(`✓ Presupuesto convertido → ${numFac}`);
+  loadPresupuestos();
+  loadFacturas();
+}
+
+/* ════════════════════════════════════════════════════
    HACIENDA — QUARTER NAV
 ════════════════════════════════════════════════════ */
 let hacYear    = new Date().getFullYear();
@@ -3244,6 +3683,7 @@ async function init() {
   updateMonthDisplay();
   updateQDisplay();
   initFactYearSel();
+  initPresYearSel();
   await Promise.all([loadCats(), loadClis()]);
   await loadDashboard();
 }
