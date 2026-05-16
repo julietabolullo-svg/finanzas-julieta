@@ -1203,6 +1203,13 @@
       </div>
 
       <hr class="divider">
+
+      <div class="regimen-toggle">
+        <button type="button" class="regimen-btn active" id="fRegimenIgic" onclick="setFactRegimen('igic')">🏝️ Canarias — IGIC 7%</button>
+        <button type="button" class="regimen-btn" id="fRegimenSin" onclick="setFactRegimen('sin_impuesto')">🇪🇸 Península — Sin impuesto</button>
+      </div>
+      <input type="hidden" id="fRegimen" value="igic">
+
       <div style="font-family:'Playfair Display',serif;font-size:.9rem;color:var(--sand);margin-bottom:.7rem">Conceptos</div>
 
       <div id="conceptosCont"></div>
@@ -1212,7 +1219,7 @@
 
       <div class="totals-box">
         <div class="totals-row"><span class="t-label">Base imponible</span><span id="pBase">0,00 €</span></div>
-        <div class="totals-row"><span class="t-label">IGIC (7%)</span><span id="pIgic">0,00 €</span></div>
+        <div class="totals-row" id="fIgicRow"><span class="t-label">IGIC (7%)</span><span id="pIgic">0,00 €</span></div>
         <div class="totals-row"><span class="t-label" style="color:var(--red)">IRPF (−15%)</span><span id="pIrpf" style="color:var(--red)">0,00 €</span></div>
         <div class="totals-row final"><span class="t-label">TOTAL A PERCIBIR</span><span class="t-value" id="pTotal">0,00 €</span></div>
       </div>
@@ -2337,6 +2344,10 @@ function openEditFactura(id) {
     $('fCliDir').value = f.cliente_direccion || '';
   }
 
+  // Regimen
+  const regimen = (f.iva_pct === 0) ? 'sin_impuesto' : 'igic';
+  setFactRegimen(regimen);
+
   // Conceptos
   $('conceptosCont').innerHTML = '';
   conceptN = 0;
@@ -2385,6 +2396,7 @@ $('btnNuevaFactura').addEventListener('click', async () => {
   $('fFecha').valueAsDate = new Date();
   $('conceptosCont').innerHTML = '';
   conceptN = 0;
+  setFactRegimen('igic');
   addConceptoRow();
   calcTotals();
   $('fClienteSel').value = 'avon';
@@ -2465,9 +2477,18 @@ function getConceptos() {
   }).filter(c => c.descripcion || c.total);
 }
 
+function setFactRegimen(r) {
+  $('fRegimen').value = r;
+  $('fRegimenIgic').classList.toggle('active', r === 'igic');
+  $('fRegimenSin').classList.toggle('active', r === 'sin_impuesto');
+  $('fIgicRow').style.display = r === 'igic' ? '' : 'none';
+  calcTotals();
+}
+
 function calcTotals() {
   const base  = getConceptos().reduce((s, c) => s + c.total, 0);
-  const igic  = base * 0.07;
+  const conIgic = $('fRegimen').value !== 'sin_impuesto';
+  const igic  = conIgic ? base * 0.07 : 0;
   const irpf  = base * 0.15;
   const total = base + igic - irpf;
   $('pBase').textContent  = fmt(base);
@@ -2500,7 +2521,8 @@ $('factForm').addEventListener('submit', async e => {
   if (!conceptos.length) { toast('Añade al menos un concepto', true); return; }
 
   const base  = conceptos.reduce((s, c) => s + c.total, 0);
-  const igic  = base * 0.07;
+  const conIgic = $('fRegimen').value !== 'sin_impuesto';
+  const igic  = conIgic ? base * 0.07 : 0;
   const irpf  = base * 0.15;
   const total = base + igic - irpf;
 
@@ -2513,7 +2535,7 @@ $('factForm').addEventListener('submit', async e => {
     cliente_direccion: cliDir,
     conceptos,
     base_imponible:    +base.toFixed(2),
-    iva_pct:           7,
+    iva_pct:           conIgic ? 7 : 0,
     irpf_pct:          15,
     total:             +total.toFixed(2),
     notas:             $('fNotas').value,
