@@ -2877,10 +2877,142 @@ async function loadPresupuestos() {
         ${p.estado === 'aceptado' && !p.factura_id
           ? `<button class="btn btn-sm" style="background:rgba(139,92,246,.15);color:var(--accent);border:1px solid rgba(139,92,246,.3);margin-top:.2rem" onclick="event.stopPropagation();convertirAFactura('${p.id}')">→ Factura</button>`
           : (p.factura_id ? `<span style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--green)">✓ Convertido</span>` : '')}
+        <button class="btn-icon" onclick="event.stopPropagation();descargarPresupuesto('${p.id}')" title="Descargar PDF">📄</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditPresupuesto('${p.id}')" title="Editar">✏️</button>
       </div>
     </div>
   `).join('');
+}
+
+function descargarPresupuesto(id) {
+  const p = _presCache[id];
+  if (!p) { toast('No se pudo cargar el presupuesto', true); return; }
+
+  const conceptos = p.conceptos || [];
+  const conIgic   = p.regimen === 'igic';
+  const base      = p.base_imponible || 0;
+  const igic      = conIgic ? base * 0.07 : 0;
+  const total     = p.total || 0;
+
+  const filas = conceptos.map(c => `
+    <tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee">${c.descripcion || ''}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${c.unidades ?? 1}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmtN(c.precio_ud ?? 0)} €</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtN(c.total ?? 0)} €</td>
+    </tr>`).join('');
+
+  const igicFila = conIgic ? `
+    <tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#666">IGIC (7%)</td>
+        <td style="padding:5px 10px;text-align:right">${fmtN(igic)} €</td></tr>` : '';
+
+  const notasHtml = (p.notas || '').replace(/\n/g, '<br>');
+
+  const validez = p.fecha_validez
+    ? `<p style="margin:4px 0;color:#666;font-size:.85rem">Válido hasta: <strong>${fmtD(p.fecha_validez)}</strong></p>` : '';
+
+  const estadoBadge = p.estado !== 'borrador'
+    ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600;background:${p.estado==='aceptado'?'#d1fae5':p.estado==='rechazado'?'#fee2e2':'#ede9fe'};color:${p.estado==='aceptado'?'#065f46':p.estado==='rechazado'?'#991b1b':'#5b21b6'}">${p.estado.toUpperCase()}</span>` : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${p.numero}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a1a; background: #fff; padding: 2cm; font-size: 14px; }
+  h1 { font-size: 2rem; font-weight: 300; letter-spacing: 2px; color: #111; margin-bottom: .2rem; }
+  .sub { font-size: .8rem; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+  .parties { display: flex; justify-content: space-between; margin: 2rem 0; gap: 2rem; }
+  .party { flex: 1; }
+  .party-label { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: .4rem; border-bottom: 1px solid #eee; padding-bottom: .3rem; }
+  .party-name { font-size: 1rem; font-weight: 600; margin-bottom: .25rem; }
+  .party-detail { font-size: .82rem; color: #555; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+  thead th { background: #1a1a1a; color: #fff; padding: 10px; font-weight: 500; font-size: .82rem; text-transform: uppercase; letter-spacing: .5px; }
+  thead th:last-child, thead th:nth-child(2), thead th:nth-child(3) { text-align: right; }
+  thead th:nth-child(2) { text-align: center; }
+  .totals { margin-left: auto; width: 280px; margin-top: .5rem; }
+  .totals tr td { padding: 5px 10px; }
+  .totals tr:last-child td { font-weight: 700; font-size: 1rem; border-top: 2px solid #1a1a1a; padding-top: 8px; }
+  .notas { margin-top: 2rem; padding: 1rem; background: #f9f9f9; border-left: 3px solid #d4b896; font-size: .82rem; color: #555; line-height: 1.6; }
+  .notas-label { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: .5rem; }
+  @media print { body { padding: 1cm; } button { display: none !important; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>Julieta <strong>Bolullo</strong></h1>
+    <p class="sub">Presupuesto</p>
+  </div>
+  <div style="text-align:right">
+    <p style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${p.numero}</p>
+    <p style="color:#666;font-size:.85rem">Fecha: <strong>${fmtD(p.fecha)}</strong></p>
+    ${validez}
+    ${estadoBadge ? '<p style="margin-top:.4rem">' + estadoBadge + '</p>' : ''}
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party">
+    <div class="party-label">Emisor</div>
+    <div class="party-name">${ME.nombre}</div>
+    <div class="party-detail">
+      DNI: ${ME.dni}<br>
+      ${ME.direccion}<br>
+      ${ME.ciudad}<br>
+      ${ME.telefono}<br>
+      ${ME.web}
+    </div>
+  </div>
+  <div class="party">
+    <div class="party-label">Cliente</div>
+    <div class="party-name">${p.cliente_nombre}</div>
+    <div class="party-detail">
+      ${p.cliente_nif ? 'NIF/CIF: ' + p.cliente_nif + '<br>' : ''}
+      ${(p.cliente_direccion || '').replace(/\n/g,'<br>')}
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Descripción</th>
+      <th style="text-align:center">Uds.</th>
+      <th style="text-align:right">Precio/ud</th>
+      <th style="text-align:right">Total</th>
+    </tr>
+  </thead>
+  <tbody>${filas}</tbody>
+</table>
+
+<table class="totals">
+  <tbody>
+    <tr><td colspan="3" style="text-align:right;color:#666">Base imponible</td>
+        <td style="text-align:right">${fmtN(base)} €</td></tr>
+    ${igicFila}
+    <tr><td colspan="3" style="text-align:right">TOTAL</td>
+        <td style="text-align:right">${fmtN(total)} €</td></tr>
+  </tbody>
+</table>
+
+${p.notas ? `<div class="notas"><div class="notas-label">Notas</div>${notasHtml}</div>` : ''}
+
+<script>window.onload = () => window.print();<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Activa los popups para descargar el PDF', true); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+function fmtN(n) {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 async function nextPresNum() {
