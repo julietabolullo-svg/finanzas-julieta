@@ -1143,6 +1143,20 @@
 
     </div>
 
+    <!-- Resumen total a pagar -->
+    <div class="card" style="border:1px solid rgba(232,82,26,.35);background:rgba(232,82,26,.06);margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.3rem">Total a ingresar a Hacienda</div>
+          <div style="font-size:.8rem;color:var(--muted);font-family:'DM Mono',monospace">Mod. 420 (IGIC neto) + Mod. 111 (IRPF retenciones)</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:1.6rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent)" id="hacTotalPagar">—</div>
+          <div style="font-size:.72rem;font-family:'DM Mono',monospace;color:var(--muted);margin-top:.15rem" id="hacTotalDetalle">—</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Detalle gastos con IGIC / IRPF -->
     <div class="card">
       <div class="card-title">Detalle fiscal del trimestre</div>
@@ -3327,6 +3341,12 @@ async function loadHacienda() {
   $('hacIrpfFacturas').textContent = fmt(irpfTotal);
   $('hacAutoCount').textContent    = autoCount + ' factura' + (autoCount !== 1 ? 's' : '');
   $('hacIrpf111').textContent      = fmt(irpfTotal);
+
+  // Resumen total
+  const igicAPagar  = Math.max(0, igicNeto);
+  const totalPagar  = igicAPagar + irpfTotal;
+  $('hacTotalPagar').textContent  = fmt(totalPagar);
+  $('hacTotalDetalle').textContent = `Mod. 420: ${fmt(igicAPagar)} + Mod. 111: ${fmt(irpfTotal)}`;
 
   // Detalle unificado: facturas emitidas + gastos con fiscal
   const listEl = $('hacGastosList');
