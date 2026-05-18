@@ -2874,14 +2874,27 @@ async function loadPresupuestos() {
         <div class="inv-total">${fmt(p.total)}</div>
         <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted)">${p.regimen === 'igic' ? 'IGIC 7%' : 'Sin impuesto'}</div>
         <span class="badge badge-${p.estado}">${p.estado}</span>
-        ${p.estado === 'aceptado' && !p.factura_id
-          ? `<button class="btn btn-sm" style="background:rgba(139,92,246,.15);color:var(--accent);border:1px solid rgba(139,92,246,.3);margin-top:.2rem" onclick="event.stopPropagation();convertirAFactura('${p.id}')">→ Factura</button>`
-          : (p.factura_id ? `<span style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--green)">✓ Convertido</span>` : '')}
+        ${p.factura_id
+          ? `<span style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--green)">✓ Convertido</span>`
+          : p.estado === 'aceptado'
+            ? `<button class="btn btn-sm" style="background:rgba(139,92,246,.15);color:var(--accent);border:1px solid rgba(139,92,246,.3)" onclick="event.stopPropagation();convertirAFactura('${p.id}')">→ Factura</button>`
+            : p.estado === 'rechazado' ? ''
+            : `<div style="display:flex;gap:.3rem;margin-top:.2rem">
+                <button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3)" onclick="event.stopPropagation();cambiarEstadoPres('${p.id}','aceptado')">✓ Aceptar</button>
+                <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)" onclick="event.stopPropagation();cambiarEstadoPres('${p.id}','rechazado')">✗ Rechazar</button>
+               </div>`}
         <button class="btn-icon" onclick="event.stopPropagation();descargarPresupuesto('${p.id}')" title="Descargar PDF">📄</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditPresupuesto('${p.id}')" title="Editar">✏️</button>
       </div>
     </div>
   `).join('');
+}
+
+async function cambiarEstadoPres(id, nuevoEstado) {
+  const { error } = await db.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast(nuevoEstado === 'aceptado' ? '✓ Presupuesto aceptado' : 'Presupuesto rechazado');
+  loadPresupuestos();
 }
 
 function descargarPresupuesto(id) {
