@@ -3293,7 +3293,7 @@ async function loadHacienda() {
     .gte('fecha', from).lte('fecha', to);
 
   const igicRep = (facts || []).reduce((s, f) =>
-    s + (f.base_imponible || 0) * ((f.iva_pct || 7) / 100), 0);
+    s + (f.base_imponible || 0) * ((f.iva_pct ?? 7) / 100), 0);
 
   // Gastos del trimestre: extraer IGIC soportado e IRPF retenciones
   const { data: movs } = await db.from('movimientos')
@@ -3345,7 +3345,7 @@ async function loadHacienda() {
     </div>`;
 
     html += (factsDetail || []).map(f => {
-      const igicF = (f.base_imponible || 0) * ((f.iva_pct || 7) / 100);
+      const igicF = (f.base_imponible || 0) * ((f.iva_pct ?? 7) / 100);
       const irpfF = (f.base_imponible || 0) * ((f.irpf_pct || 15) / 100);
       return `<div class="hac-detail-item">
         <div style="flex:1;min-width:0">
@@ -3355,7 +3355,7 @@ async function loadHacienda() {
         <div style="text-align:right;flex-shrink:0">
           <div style="font-family:'DM Mono',monospace;font-size:.88rem;color:var(--green)">+${fmt(f.total)}</div>
           <div style="font-family:'DM Mono',monospace;font-size:.7rem;margin-top:.2rem">
-            <span style="background:rgba(232,82,26,.15);color:var(--accent);border-radius:4px;padding:1px 6px">IGIC ${fmt(igicF)}</span>
+            ${igicF > 0 ? `<span style="background:rgba(232,82,26,.15);color:var(--accent);border-radius:4px;padding:1px 6px">IGIC ${fmt(igicF)}</span>` : `<span style="background:rgba(100,100,100,.12);color:var(--muted);border-radius:4px;padding:1px 6px">Sin IGIC</span>`}
             <span style="background:rgba(235,87,87,.12);color:var(--red);border-radius:4px;padding:1px 6px;margin-left:4px">IRPF −${fmt(irpfF)}</span>
           </div>
         </div>
