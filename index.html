@@ -3301,10 +3301,11 @@ $('nextQ').addEventListener('click', () => {
 async function loadHacienda() {
   const { from, to } = getQuarterDates(hacYear, hacQuarter);
 
-  // IGIC repercutido: facturas emitidas en el trimestre
+  // IGIC repercutido: facturas emitidas en el trimestre (excluir canceladas)
   const { data: facts } = await db.from('facturas')
     .select('base_imponible, iva_pct, fecha')
-    .gte('fecha', from).lte('fecha', to);
+    .gte('fecha', from).lte('fecha', to)
+    .neq('estado', 'cancelada');
 
   const igicRep = (facts || []).reduce((s, f) =>
     s + (f.base_imponible || 0) * ((f.iva_pct ?? 7) / 100), 0);
@@ -3358,6 +3359,7 @@ async function loadHacienda() {
     const { data: factsDetail } = await db.from('facturas')
       .select('numero, fecha, cliente_nombre, base_imponible, iva_pct, irpf_pct, total')
       .gte('fecha', from).lte('fecha', to)
+      .neq('estado', 'cancelada')
       .order('fecha', { ascending: false });
 
     html += `<div style="font-family:'DM Mono',monospace;font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">
