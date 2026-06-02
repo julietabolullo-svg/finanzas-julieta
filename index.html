@@ -1244,7 +1244,7 @@
         <textarea id="fNotas" rows="3"></textarea>
       </div>
 
-      <button type="submit" class="btn btn-primary btn-full">Crear factura</button>
+      <button type="submit" class="btn btn-primary btn-full" id="factSubmitBtn">Crear factura</button>
     </form>
   </div>
 </div>
@@ -2352,6 +2352,7 @@ function openEditFactura(id) {
 
   $('editFacturaId').value = f.id;
   $('factModalTitle').textContent = 'Editar factura';
+  $('factSubmitBtn').textContent = 'Guardar cambios';
   $('fNum').value   = f.numero;
   $('fFecha').value = f.fecha;
   $('fNotas').value = f.notas || '';
@@ -2417,6 +2418,7 @@ function notasForCliente(val) {
 $('btnNuevaFactura').addEventListener('click', async () => {
   $('editFacturaId').value = '';
   $('factModalTitle').textContent = 'Nueva factura';
+  $('factSubmitBtn').textContent = 'Crear factura';
   $('fNum').value   = await nextInvoiceNum();
   $('fFecha').valueAsDate = new Date();
   $('conceptosCont').innerHTML = '';
