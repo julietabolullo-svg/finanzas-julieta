@@ -3244,7 +3244,7 @@ async function convertirAFactura(presId) {
   const numFac = await nextInvoiceNum();
   const base   = p.base_imponible || 0;
   const igic   = p.regimen === 'igic' ? +(base * 0.07).toFixed(2) : 0;
-  const irpf   = 0;
+  const irpf   = +(base * 0.15).toFixed(2);
   const total  = +(base + igic - irpf).toFixed(2);
 
   const factData = {
@@ -3256,7 +3256,7 @@ async function convertirAFactura(presId) {
     conceptos:         p.conceptos || [],
     base_imponible:    base,
     iva_pct:           p.regimen === 'igic' ? 7 : 0,
-    irpf_pct:          0,
+    irpf_pct:          15,
     total,
     estado:            'pendiente',
     notas:             p.notas || '',
