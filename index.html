@@ -1017,12 +1017,17 @@
   <!-- ═══════════════ FACTURAS ═══════════════ -->
   <section class="tab-pane" id="tab-facturas">
 
-    <!-- Selector de año -->
+    <!-- Selector de año y mes -->
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
       <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--sand)">Resumen</div>
-      <select id="factYearSel" style="width:auto;min-width:90px" onchange="loadFacturas()">
+      <select id="factYearSel" style="width:auto;min-width:90px" onchange="loadFacturas()"></select>
+      <select id="factMonthSel" style="width:auto;min-width:120px" onchange="loadFacturas()">
+        <option value="all">Todos los meses</option>
+        <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+        <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+        <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+        <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
       </select>
-      <span style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted)">— solo año seleccionado</span>
     </div>
 
     <div class="kpi-grid">
@@ -2299,10 +2304,14 @@ function initFactYearSel() {
 }
 
 async function loadFacturas() {
-  const yearSel = $('factYearSel')?.value || String(new Date().getFullYear());
+  const yearSel  = $('factYearSel')?.value  || String(new Date().getFullYear());
+  const monthSel = $('factMonthSel')?.value || 'all';
 
   let q = db.from('facturas').select('*').order('fecha', { ascending: false });
-  if (yearSel !== 'all') {
+  if (yearSel !== 'all' && monthSel !== 'all') {
+    const lastDay = new Date(+yearSel, +monthSel, 0).getDate();
+    q = q.gte('fecha', `${yearSel}-${monthSel}-01`).lte('fecha', `${yearSel}-${monthSel}-${lastDay}`);
+  } else if (yearSel !== 'all') {
     q = q.gte('fecha', `${yearSel}-01-01`).lte('fecha', `${yearSel}-12-31`);
   }
   const { data, error } = await q;
@@ -2338,6 +2347,7 @@ async function loadFacturas() {
         <div style="font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted)">base ${fmt(f.base_imponible || 0)}</div>
         <span class="badge badge-${f.estado}">${f.estado}</span>
         ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
+        <button class="btn-icon" onclick="event.stopPropagation();descargarFactura('${f.id}')" title="Descargar PDF">📄</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
       </div>
     </div>
@@ -2648,6 +2658,128 @@ $('factForm').addEventListener('submit', async e => {
   loadFacturas();
   loadDashboard();
 });
+
+/* ════════════════════════════════════════════════════
+   FACTURA DOWNLOAD PDF
+════════════════════════════════════════════════════ */
+function descargarFactura(id) {
+  const f = _factCache[id];
+  if (!f) { toast('No se pudo cargar la factura', true); return; }
+
+  const conceptos = f.conceptos || [];
+  const igicAmt   = (f.base_imponible || 0) * ((f.iva_pct ?? 7) / 100);
+  const irpfAmt   = (f.base_imponible || 0) * ((f.irpf_pct ?? 15) / 100);
+
+  const filas = conceptos.map(c => `
+    <tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee">${c.descripcion || ''}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${c.unidades ?? 1}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmtN(c.precio_ud ?? 0)} €</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtN(c.total ?? 0)} €</td>
+    </tr>`).join('');
+
+  const igicFila = f.iva_pct > 0
+    ? `<tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#666">IGIC (${f.iva_pct}%)</td>
+           <td style="padding:5px 10px;text-align:right">${fmtN(igicAmt)} €</td></tr>` : '';
+
+  const irpfFila = f.irpf_pct > 0
+    ? `<tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#c00">IRPF (−${f.irpf_pct}%)</td>
+           <td style="padding:5px 10px;text-align:right;color:#c00">−${fmtN(irpfAmt)} €</td></tr>` : '';
+
+  const notasHtml = (f.notas || '').replace(/\n/g, '<br>');
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${f.numero}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; background:#fff; padding:1.8cm; font-size:13px; }
+  h1 { font-size:1.8rem; font-weight:300; letter-spacing:2px; }
+  h1 strong { color:#E8521A; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem; border-bottom:2px solid #E8521A; padding-bottom:1rem; }
+  .fac-num { font-size:1.3rem; font-weight:700; color:#E8521A; font-family:monospace; }
+  .parties { display:flex; justify-content:space-between; margin:1.2rem 0; gap:2rem; }
+  .party { flex:1; }
+  .party-label { font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.3rem; border-bottom:1px solid #eee; padding-bottom:.2rem; }
+  .party-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
+  .party-detail { font-size:.78rem; color:#555; line-height:1.5; }
+  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.85rem; }
+  thead th { background:#1a1a1a; color:#fff; padding:8px 10px; font-weight:500; font-size:.75rem; text-transform:uppercase; }
+  thead th:last-child, thead th:nth-child(3) { text-align:right; }
+  thead th:nth-child(2) { text-align:center; }
+  .totals { margin-left:auto; width:260px; border-collapse:collapse; }
+  .totals tr:last-child td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; }
+  .notas { margin-top:1.2rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
+  .notas strong { display:block; margin-bottom:.3rem; font-size:.7rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+  @media print { body { padding:1cm; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>Julieta <strong>Bolullo</strong></h1>
+    <div style="font-size:.78rem;color:#666;margin-top:.3rem">
+      DNI: ${ME.dni} · ${ME.direccion} · ${ME.ciudad}<br>
+      ${ME.telefono} · ${ME.web}
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div class="fac-num">${f.numero}</div>
+    <div style="font-size:.8rem;color:#666;margin-top:.3rem">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party">
+    <div class="party-label">Emisor</div>
+    <div class="party-name">${ME.nombre}</div>
+    <div class="party-detail">DNI: ${ME.dni}<br>${ME.direccion}<br>${ME.ciudad}<br>Tel: ${ME.telefono}</div>
+  </div>
+  <div class="party">
+    <div class="party-label">Cliente / Destinatario</div>
+    <div class="party-name">${f.cliente_nombre}</div>
+    <div class="party-detail">
+      ${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}
+      ${(f.cliente_direccion || '').replace(/\n/g,'<br>')}
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Descripción</th>
+      <th style="text-align:center">Uds.</th>
+      <th style="text-align:right">Precio/ud</th>
+      <th style="text-align:right">Total</th>
+    </tr>
+  </thead>
+  <tbody>${filas}</tbody>
+</table>
+
+<table class="totals">
+  <tbody>
+    <tr><td colspan="3" style="text-align:right;padding:5px 10px;color:#666">Base imponible</td>
+        <td style="text-align:right;padding:5px 10px">${fmtN(f.base_imponible || 0)} €</td></tr>
+    ${igicFila}
+    ${irpfFila}
+    <tr><td colspan="3" style="text-align:right;padding:5px 10px">TOTAL A PERCIBIR</td>
+        <td style="text-align:right;padding:5px 10px">${fmtN(f.total || 0)} €</td></tr>
+  </tbody>
+</table>
+
+${f.notas ? `<div class="notas"><strong>Notas</strong>${notasHtml}</div>` : ''}
+
+<script>window.onload = () => window.print();<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Activa los popups para descargar el PDF', true); return; }
+  win.document.write(html);
+  win.document.close();
+}
 
 /* ════════════════════════════════════════════════════
    FACTURA PREVIEW
