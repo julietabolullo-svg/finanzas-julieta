@@ -1341,7 +1341,8 @@
       <div class="totals-box">
         <div class="totals-row"><span class="t-label">Base imponible</span><span id="ppBase">0,00 €</span></div>
         <div class="totals-row" id="ppIgicRow"><span class="t-label">IGIC (7%)</span><span id="ppIgic">0,00 €</span></div>
-        <div class="totals-row final"><span class="t-label">TOTAL</span><span class="t-value" id="ppTotal">0,00 €</span></div>
+        <div class="totals-row" id="ppIrpfRow"><span class="t-label" style="color:var(--red)">IRPF (−15%)</span><span id="ppIrpf" style="color:var(--red)">0,00 €</span></div>
+        <div class="totals-row final"><span class="t-label">TOTAL A PERCIBIR</span><span class="t-value" id="ppTotal">0,00 €</span></div>
       </div>
 
       <div class="form-group">
@@ -3065,6 +3066,7 @@ function descargarPresupuesto(id) {
   const conIgic   = p.regimen === 'igic';
   const base      = p.base_imponible || 0;
   const igic      = conIgic ? base * 0.07 : 0;
+  const irpf      = base * 0.15;
   const total     = p.total || 0;
 
   const filas = conceptos.map(c => `
@@ -3078,6 +3080,10 @@ function descargarPresupuesto(id) {
   const igicFila = conIgic ? `
     <tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#666">IGIC (7%)</td>
         <td style="padding:5px 10px;text-align:right">${fmtN(igic)} €</td></tr>` : '';
+
+  const irpfFila = `
+    <tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#c00">IRPF (−15%)</td>
+        <td style="padding:5px 10px;text-align:right;color:#c00">−${fmtN(irpf)} €</td></tr>`;
 
   const notasHtml = (p.notas || '').replace(/\n/g, '<br>');
 
@@ -3168,7 +3174,8 @@ function descargarPresupuesto(id) {
     <tr><td colspan="3" style="text-align:right;color:#666">Base imponible</td>
         <td style="text-align:right">${fmtN(base)} €</td></tr>
     ${igicFila}
-    <tr><td colspan="3" style="text-align:right">TOTAL</td>
+    ${irpfFila}
+    <tr><td colspan="3" style="text-align:right">TOTAL A PERCIBIR</td>
         <td style="text-align:right">${fmtN(total)} €</td></tr>
   </tbody>
 </table>
@@ -3215,9 +3222,11 @@ function calcPresTotals() {
   }, 0);
   const regimen = $('pRegimen')?.value || 'igic';
   const igic  = regimen === 'igic' ? base * 0.07 : 0;
-  const total = base + igic;
+  const irpf  = base * 0.15;
+  const total = base + igic - irpf;
   $('ppBase').textContent  = fmt(base);
   $('ppIgic').textContent  = fmt(igic);
+  $('ppIrpf').textContent  = fmt(irpf);
   $('ppTotal').textContent = fmt(total);
 }
 
@@ -3343,7 +3352,8 @@ $('presForm').addEventListener('submit', async e => {
   const base    = +conceptos.reduce((s, c) => s + c.total, 0).toFixed(2);
   const regimen = $('pRegimen').value;
   const igic    = regimen === 'igic' ? +(base * 0.07).toFixed(2) : 0;
-  const total   = +(base + igic).toFixed(2);
+  const irpf    = +(base * 0.15).toFixed(2);
+  const total   = +(base + igic - irpf).toFixed(2);
 
   const presData = {
     numero:             $('pNum').value,
