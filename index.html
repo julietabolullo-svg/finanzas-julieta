@@ -889,7 +889,7 @@
             <!-- Proveedor -->
             <div class="form-group">
               <label>Proveedor (opcional)</label>
-              <input type="text" id="movProveedor" placeholder="Nombre del proveedor / emisor">
+              <input type="text" id="movProveedor" placeholder="Nombre del proveedor / emisor" oninput="autoDetectProyecto(this.value)">
             </div>
             <!-- Proyecto -->
             <div class="form-group">
@@ -3037,6 +3037,18 @@ function onIgicSelChange() {
   const grp = $('movIgicAmtGroup');
   if (grp) grp.style.display = sel === 'manual' ? '' : 'none';
   if (sel !== 'manual' && $('movIgicAmt')) $('movIgicAmt').value = '';
+}
+
+const PROJ_RULES = [
+  { keywords: ['anthropic', 'antropic', 'claude'], proj: 'pliquia' },
+];
+
+function autoDetectProyecto(prov) {
+  const lower = prov.toLowerCase();
+  const match = PROJ_RULES.find(r => r.keywords.some(k => lower.includes(k)));
+  if (match && $('movProyecto')) {
+    $('movProyecto').value = match.proj;
+  }
 }
 
 function getFiscalFromForm() {
