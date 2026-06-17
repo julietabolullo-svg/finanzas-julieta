@@ -2393,6 +2393,7 @@ async function loadFacturas() {
         <span class="badge badge-${f.estado}">${f.estado}</span>
         ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
         <button class="btn-icon" onclick="event.stopPropagation();descargarFactura('${f.id}')" title="Descargar PDF">📄</button>
+        <button class="btn-icon" onclick="event.stopPropagation();duplicarFactura('${f.id}')" title="Duplicar factura">📋</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
       </div>
     </div>
@@ -2411,6 +2412,44 @@ function openEditFactura(id) {
   $('factSubmitBtn').textContent = 'Guardar cambios';
   $('fNum').value   = f.numero;
   $('fFecha').value = f.fecha;
+  $('fNotas').value = f.notas || '';
+
+  // Cliente
+  const cliKey = Object.keys(CLI_PREDEFINED).find(k => CLI_PREDEFINED[k].nombre === f.cliente_nombre);
+  if (cliKey && cliKey !== 'otro') {
+    $('fClienteSel').value = cliKey;
+    $('clienteManual').style.display = 'none';
+  } else {
+    $('fClienteSel').value = 'otro';
+    $('clienteManual').style.display = '';
+    $('fCliNom').value = f.cliente_nombre || '';
+    $('fCliNif').value = f.cliente_nif || '';
+    $('fCliDir').value = f.cliente_direccion || '';
+  }
+
+  // Regimen
+  const regimen = f.iva_pct > 0 ? 'igic'
+                : f.irpf_pct === 0 ? 'sin_retencion'
+                : 'sin_impuesto';
+  setFactRegimen(regimen);
+
+  // Conceptos
+  $('conceptosCont').innerHTML = '';
+  conceptN = 0;
+  (f.conceptos || []).forEach(c => addConceptoRow(c.descripcion, c.unidades, c.precio_ud));
+  calcTotals();
+  openM('overlayFactura');
+}
+
+async function duplicarFactura(id) {
+  const f = _factCache[id];
+  if (!f) { toast('No se pudo cargar la factura', true); return; }
+
+  $('editFacturaId').value = '';
+  $('factModalTitle').textContent = `Nueva factura (copia de ${f.numero})`;
+  $('factSubmitBtn').textContent = 'Crear factura';
+  $('fNum').value   = await nextInvoiceNum();
+  $('fFecha').valueAsDate = new Date();
   $('fNotas').value = f.notas || '';
 
   // Cliente
@@ -2758,7 +2797,11 @@ function descargarFactura(id) {
   .totals tr:last-child td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; }
   .notas { margin-top:1.2rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
   .notas strong { display:block; margin-bottom:.3rem; font-size:.7rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
-  @media print { body { padding:1cm; } }
+  @media print {
+    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+    html, body { height: auto; overflow: visible; }
+    body { padding: 0; }
+  }
 </style>
 </head>
 <body>
@@ -3165,7 +3208,12 @@ function descargarPresupuesto(id) {
   .totals tr:last-child td { font-weight: 700; font-size: 1rem; border-top: 2px solid #1a1a1a; padding-top: 8px; }
   .notas { margin-top: 2rem; padding: 1rem; background: #f9f9f9; border-left: 3px solid #d4b896; font-size: .82rem; color: #555; line-height: 1.6; }
   .notas-label { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: .5rem; }
-  @media print { body { padding: 1cm; } button { display: none !important; } }
+  @media print {
+    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+    html, body { height: auto; overflow: visible; }
+    body { padding: 0; }
+    button { display: none !important; }
+  }
 </style>
 </head>
 <body>
