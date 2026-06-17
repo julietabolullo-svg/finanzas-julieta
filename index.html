@@ -712,6 +712,7 @@
     }
     .fb-igic { background: rgba(111,207,151,.15); color: var(--green); }
     .fb-irpf { background: rgba(235,87,87,.15);  color: var(--red); }
+    .fb-proj { background: rgba(86,156,214,.15);  color: #56a0d3; }
 
     /* ── PRINT ──────────────────────────────────────── */
     @media print {
@@ -890,6 +891,14 @@
               <label>Proveedor (opcional)</label>
               <input type="text" id="movProveedor" placeholder="Nombre del proveedor / emisor">
             </div>
+            <!-- Proyecto -->
+            <div class="form-group">
+              <label>Imputar a proyecto (coste)</label>
+              <select id="movProyecto">
+                <option value="">— Sin proyecto —</option>
+                <option value="pliquia">🚀 Pliquia</option>
+              </select>
+            </div>
             <!-- IGIC / IVA -->
             <div class="form-row">
               <div class="form-group">
@@ -968,6 +977,7 @@
           <span style="color:var(--green)" id="movTotalIng"></span>
           <span style="color:var(--red)"   id="movTotalGas"></span>
         </div>
+        <div id="movProyectosBox" style="display:none;margin-top:.75rem;padding:.6rem .75rem;border:1px solid rgba(86,160,211,.25);border-radius:8px;background:rgba(86,160,211,.06)"></div>
       </div>
 
     </div>
@@ -1401,6 +1411,13 @@
       <div class="form-group">
         <label>Imputar a cliente (opcional)</label>
         <select id="editMovGastoCliente"><option value="">Sin cliente / Genérico</option></select>
+      </div>
+      <div class="form-group">
+        <label>Proyecto (coste)</label>
+        <select id="editMovProyecto">
+          <option value="">— Sin proyecto —</option>
+          <option value="pliquia">🚀 Pliquia</option>
+        </select>
       </div>
     </div>
     <div style="display:flex;gap:.5rem;margin-top:1rem">
@@ -1979,6 +1996,31 @@ function renderMovList(movs) {
   const totBar = $('movTotals');
   if (totBar) totBar.style.display = movs.length ? 'flex' : 'none';
 
+  // Resumen costes por proyecto
+  const proyBox = $('movProyectosBox');
+  if (proyBox) {
+    const gastos = movs.filter(m => m.tipo === 'gasto');
+    const byProj = {};
+    gastos.forEach(m => {
+      const { fiscal } = decGasto(m.descripcion);
+      if (fiscal.proj) byProj[fiscal.proj] = (byProj[fiscal.proj] || 0) + (m.importe || 0);
+    });
+    const proyNames = { pliquia: '🚀 Pliquia' };
+    const entries = Object.entries(byProj);
+    if (entries.length) {
+      proyBox.style.display = '';
+      proyBox.innerHTML = '<div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem">Costes por proyecto</div>' +
+        entries.map(([k, v]) =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;padding:.2rem 0">
+            <span class="fiscal-badge fb-proj" style="font-size:.72rem">${proyNames[k] || k}</span>
+            <span style="font-weight:600;color:var(--red);font-family:'DM Mono',monospace;font-size:.85rem">−${fmt(v)}</span>
+          </div>`
+        ).join('');
+    } else {
+      proyBox.style.display = 'none';
+    }
+  }
+
   if (!movs.length) { ul.innerHTML = '<li class="empty">Sin movimientos este mes</li>'; return; }
   movs.forEach(m => _movCache[m.id] = m);
   ul.innerHTML = movs.map(m => {
@@ -2030,6 +2072,7 @@ function openEditMov(id) {
   if (!isIngreso) {
     $('editMovBloque').value = m.bloque || 'empresa';
     if (m.cliente_id) $('editMovGastoCliente').value = m.cliente_id;
+    $('editMovProyecto').value = mFiscalEdit.proj || '';
   } else {
     if (m.cliente_id) $('editMovCliente').value = m.cliente_id;
   }
@@ -2042,6 +2085,7 @@ async function saveEditMov() {
   const tipo   = $('editMovTipo').value;
   // Recuperar los datos fiscales originales del movimiento en caché
   const origFiscal = decGasto(_movCache[id]?.descripcion).fiscal;
+  if (tipo !== 'ingreso') origFiscal.proj = $('editMovProyecto')?.value || '';
   const descLimpia = $('editMovDesc').value.trim();
   const descFinal  = encGasto(descLimpia, origFiscal);
 
@@ -2912,17 +2956,17 @@ $('btnPrint').addEventListener('click', () => window.print());
    Format: "texto usuario||{"t":"gasolina","igic":5.6,"irpf":0,"prov":"BP"}"
 ════════════════════════════════════════════════════ */
 function encGasto(desc, fiscal) {
-  const { t = '', igic = 0, irpf = 0, prov = '' } = fiscal;
-  if (!t && !igic && !irpf && !prov) return desc;
-  return desc + '||' + JSON.stringify({ t, igic: +igic.toFixed(2), irpf: +irpf.toFixed(2), prov });
+  const { t = '', igic = 0, irpf = 0, prov = '', proj = '' } = fiscal;
+  if (!t && !igic && !irpf && !prov && !proj) return desc;
+  return desc + '||' + JSON.stringify({ t, igic: +igic.toFixed(2), irpf: +irpf.toFixed(2), prov, proj });
 }
 
 function decGasto(raw) {
-  if (!raw) return { desc: '', fiscal: { t: '', igic: 0, irpf: 0, prov: '' } };
+  if (!raw) return { desc: '', fiscal: { t: '', igic: 0, irpf: 0, prov: '', proj: '' } };
   const idx = raw.indexOf('||');
-  if (idx === -1) return { desc: raw, fiscal: { t: '', igic: 0, irpf: 0, prov: '' } };
+  if (idx === -1) return { desc: raw, fiscal: { t: '', igic: 0, irpf: 0, prov: '', proj: '' } };
   const desc = raw.slice(0, idx);
-  let fiscal = { t: '', igic: 0, irpf: 0, prov: '' };
+  let fiscal = { t: '', igic: 0, irpf: 0, prov: '', proj: '' };
   try { fiscal = { ...fiscal, ...JSON.parse(raw.slice(idx + 2)) }; } catch(e) {}
   return { desc, fiscal };
 }
@@ -2931,6 +2975,7 @@ function fiscalBadges(fiscal) {
   let b = '';
   if (fiscal.igic > 0) b += `<span class="fiscal-badge fb-igic">IGIC ${fmt(fiscal.igic)}</span>`;
   if (fiscal.irpf > 0) b += `<span class="fiscal-badge fb-irpf">IRPF ${fmt(fiscal.irpf)}</span>`;
+  if (fiscal.proj)     b += `<span class="fiscal-badge fb-proj">🚀 ${fiscal.proj.charAt(0).toUpperCase()+fiscal.proj.slice(1)}</span>`;
   return b;
 }
 
@@ -2954,6 +2999,7 @@ function onIgicSelChange() {
 function getFiscalFromForm() {
   const tipo = $('movTipoGasto')?.value || '';
   const prov = $('movProveedor')?.value.trim() || '';
+  const proj = $('movProyecto')?.value || '';
   const igicSel = $('movIgicSel')?.value || '0';
   const importe = parseFloat($('movImporte')?.value) || 0;
   let igic = 0;
@@ -2961,12 +3007,13 @@ function getFiscalFromForm() {
   else if (igicSel === 'auto21') igic = +(importe * 21 / 121).toFixed(2);
   else if (igicSel === 'manual') igic = parseFloat($('movIgicAmt')?.value) || 0;
   const irpf = parseFloat($('movIrpfAmt')?.value) || 0;
-  return { t: tipo, igic, irpf, prov };
+  return { t: tipo, igic, irpf, prov, proj };
 }
 
 function clearGastoFiscalForm() {
   if ($('movTipoGasto'))     $('movTipoGasto').value = '';
   if ($('movProveedor'))     $('movProveedor').value = '';
+  if ($('movProyecto'))      $('movProyecto').value = '';
   if ($('movIgicSel'))       $('movIgicSel').value = '0';
   if ($('movIgicAmtGroup'))  $('movIgicAmtGroup').style.display = 'none';
   if ($('movIgicAmt'))       $('movIgicAmt').value = '';
