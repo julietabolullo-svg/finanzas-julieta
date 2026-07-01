@@ -1178,6 +1178,12 @@
       <div id="hacGastosList"><div class="loading">Carga el trimestre para ver el detalle</div></div>
     </div>
 
+    <!-- Histórico trimestres -->
+    <div class="card" id="hacHistoricoCard" style="margin-top:1rem">
+      <div class="card-title">Histórico — lo pagado por trimestre</div>
+      <div id="hacHistorico"><div class="loading">Calculando...</div></div>
+    </div>
+
   </section>
 
 </main>
@@ -1619,7 +1625,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     $('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'facturas') { initFactYearSel(); loadFacturas(); }
     if (btn.dataset.tab === 'presupuestos') { initPresYearSel(); loadPresupuestos(); }
-    if (btn.dataset.tab === 'hacienda') { updateQDisplay(); loadHacienda(); }
+    if (btn.dataset.tab === 'hacienda') { updateQDisplay(); loadHacienda(); loadHacHistorico(); }
   });
 });
 
@@ -2393,7 +2399,7 @@ async function loadFacturas() {
         <span class="badge badge-${f.estado}">${f.estado}</span>
         ${f.estado === 'pendiente' ? `<button class="btn btn-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);margin-top:.2rem" onclick="event.stopPropagation();marcarPagada('${f.id}')">✓ Pagada</button>` : ''}
         <button class="btn-icon" onclick="event.stopPropagation();descargarFactura('${f.id}')" title="Descargar PDF">📄</button>
-        <button class="btn-icon" onclick="event.stopPropagation();duplicarFactura('${f.id}')" title="Duplicar factura">📋</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();duplicarFactura('${f.id}')" style="font-size:.7rem;padding:.2rem .5rem">Duplicar</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
       </div>
     </div>
@@ -2797,11 +2803,8 @@ function descargarFactura(id) {
   .totals tr:last-child td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; }
   .notas { margin-top:1.2rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
   .notas strong { display:block; margin-bottom:.3rem; font-size:.7rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
-  @media print {
-    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
-    html, body { height: auto; overflow: visible; }
-    body { padding: 0; }
-  }
+  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+  @media print { html, body { height: auto; overflow: visible; } body { padding: 0; } }
 </style>
 </head>
 <body>
@@ -3220,12 +3223,8 @@ function descargarPresupuesto(id) {
   .totals tr:last-child td { font-weight: 700; font-size: 1rem; border-top: 2px solid #1a1a1a; padding-top: 8px; }
   .notas { margin-top: 2rem; padding: 1rem; background: #f9f9f9; border-left: 3px solid #d4b896; font-size: .82rem; color: #555; line-height: 1.6; }
   .notas-label { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: .5rem; }
-  @media print {
-    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
-    html, body { height: auto; overflow: visible; }
-    body { padding: 0; }
-    button { display: none !important; }
-  }
+  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+  @media print { html, body { height: auto; overflow: visible; } body { padding: 0; } button { display: none !important; } }
 </style>
 </head>
 <body>
@@ -3676,6 +3675,77 @@ async function loadHacienda() {
   }
 
   listEl.innerHTML = html;
+}
+
+async function loadHacHistorico() {
+  const el = $('hacHistorico');
+  if (!el) return;
+
+  // Construir lista de trimestres: año actual + año anterior, T1→T4
+  const today = new Date();
+  const curY  = today.getFullYear();
+  const quarters = [];
+  for (const y of [curY - 1, curY]) {
+    for (let q = 1; q <= 4; q++) quarters.push({ y, q });
+  }
+
+  // Fetch de una sola vez: facturas y gastos de los dos años
+  const yFrom = `${curY - 1}-01-01`;
+  const yTo   = `${curY}-12-31`;
+
+  const [{ data: facts }, { data: movs }] = await Promise.all([
+    db.from('facturas').select('base_imponible, iva_pct, irpf_pct, fecha').gte('fecha', yFrom).lte('fecha', yTo).neq('estado', 'cancelada'),
+    db.from('movimientos').select('descripcion, fecha').eq('tipo', 'gasto').gte('fecha', yFrom).lte('fecha', yTo),
+  ]);
+
+  const rows = quarters.map(({ y, q }) => {
+    const { from, to } = getQuarterDates(y, q);
+    const qFacts = (facts || []).filter(f => f.fecha >= from && f.fecha <= to);
+    const qMovs  = (movs  || []).filter(m => m.fecha >= from && m.fecha <= to);
+
+    const igicRep = qFacts.reduce((s, f) => s + (f.base_imponible || 0) * ((f.iva_pct ?? 7) / 100), 0);
+    let igicSop = 0, irpf = 0;
+    qMovs.forEach(m => {
+      const { fiscal } = decGasto(m.descripcion);
+      igicSop += fiscal.igic || 0;
+      irpf    += fiscal.irpf || 0;
+    });
+
+    const mod420 = Math.max(0, igicRep - igicSop);
+    const total  = mod420 + irpf;
+    const isCurrent = y === hacYear && q === hacQuarter;
+    const isFuture  = y > curY || (y === curY && q > Math.ceil((today.getMonth() + 1) / 3));
+    return { y, q, mod420, irpf, total, isCurrent, isFuture };
+  });
+
+  // Agrupar por año
+  const byYear = {};
+  rows.forEach(r => { (byYear[r.y] = byYear[r.y] || []).push(r); });
+
+  let html = '';
+  for (const [y, qs] of Object.entries(byYear)) {
+    html += `<div style="font-family:'DM Mono',monospace;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:${y == curY - 1 ? '0' : '.9rem'} 0 .4rem">${y}</div>`;
+    html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-bottom:.2rem">`;
+    qs.forEach(r => {
+      const borderCol = r.isCurrent ? 'var(--accent)' : 'var(--border)';
+      const bg        = r.isCurrent ? 'rgba(232,82,26,.07)' : 'var(--bg2)';
+      const opacity   = r.isFuture  ? 'opacity:.35' : '';
+      html += `
+        <div style="border:1px solid ${borderCol};background:${bg};border-radius:8px;padding:.6rem .7rem;${opacity}">
+          <div style="font-family:'DM Mono',monospace;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.3rem">
+            T${r.q}${r.isCurrent ? ' ◂' : ''}
+          </div>
+          ${r.isFuture ? `<div style="font-size:.75rem;color:var(--muted)">—</div>` : `
+          <div style="font-weight:700;font-family:'DM Mono',monospace;font-size:.95rem;color:${r.total > 0 ? 'var(--accent)' : 'var(--green)'}">${fmt(r.total)}</div>
+          <div style="font-size:.67rem;color:var(--muted);margin-top:.25rem;line-height:1.5;font-family:'DM Mono',monospace">
+            420: ${fmt(r.mod420)}<br>111: ${fmt(r.irpf)}
+          </div>`}
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  el.innerHTML = html;
 }
 
 /* ════════════════════════════════════════════════════
