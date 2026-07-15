@@ -2494,21 +2494,16 @@ async function marcarPagada(id) {
 }
 
 async function nextInvoiceNum() {
-  const { data } = await db.from('facturas').select('numero').order('created_at', { ascending: false }).limit(1);
-  const today = new Date();
-  const y = today.getFullYear();
+  const y = new Date().getFullYear();
   const MIN = 48;
-
+  // Traer todos los números del año actual para encontrar el máximo real
+  const { data } = await db.from('facturas').select('numero').ilike('numero', `FAC-${y}-%`);
   if (!data || !data.length) return `FAC-${y}-${String(MIN).padStart(3,'0')}`;
-
-  const match = (data[0].numero || '').match(/FAC-(\d+)-(\d+)/);
-  if (!match) return `FAC-${y}-${String(MIN).padStart(3,'0')}`;
-
-  const ly = parseInt(match[1]);
-  const ln = parseInt(match[2]);
-
-  if (y > ly) return `FAC-${y}-001`;
-  return `FAC-${y}-${String(ln + 1).padStart(3,'0')}`;
+  const max = data.reduce((m, f) => {
+    const match = (f.numero || '').match(/FAC-\d+-(\d+)/);
+    return match ? Math.max(m, parseInt(match[1])) : m;
+  }, 0);
+  return `FAC-${y}-${String(Math.max(max + 1, MIN)).padStart(3,'0')}`;
 }
 
 function notasForCliente(val) {
