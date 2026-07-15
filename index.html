@@ -2780,26 +2780,29 @@ function descargarFactura(id) {
 <title>${f.numero}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
-  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
-  html, body { height: auto; background:#fff; }
-  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:13px; }
-  h1 { font-size:1.8rem; font-weight:300; letter-spacing:2px; }
+  @page { margin: 1cm; }
+  html, body { height:auto; background:#fff; }
+  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; padding:1cm; }
+  .no-print { text-align:center; padding:.5rem; background:#f0f0f0; margin-bottom:.8rem; }
+  .no-print button { padding:.35rem 1.2rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; }
+  @media print { .no-print { display:none; } body { padding:0; } }
+  h1 { font-size:1.5rem; font-weight:300; letter-spacing:2px; }
   h1 strong { color:#E8521A; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem; border-bottom:2px solid #E8521A; padding-bottom:1rem; }
-  .fac-num { font-size:1.3rem; font-weight:700; color:#E8521A; font-family:monospace; }
-  .parties { display:flex; justify-content:space-between; margin:1.2rem 0; gap:2rem; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.9rem; border-bottom:2px solid #E8521A; padding-bottom:.7rem; }
+  .fac-num { font-size:1.1rem; font-weight:700; color:#E8521A; font-family:monospace; }
+  .parties { display:flex; justify-content:space-between; margin:.7rem 0; gap:1.5rem; }
   .party { flex:1; }
-  .party-label { font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.3rem; border-bottom:1px solid #eee; padding-bottom:.2rem; }
-  .party-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
-  .party-detail { font-size:.78rem; color:#555; line-height:1.5; }
-  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.85rem; }
-  thead th { background:#1a1a1a; color:#fff; padding:8px 10px; font-weight:500; font-size:.75rem; text-transform:uppercase; }
+  .party-label { font-size:.6rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.2rem; border-bottom:1px solid #eee; padding-bottom:.15rem; }
+  .party-name { font-size:.85rem; font-weight:700; margin-bottom:.15rem; }
+  .party-detail { font-size:.72rem; color:#555; line-height:1.4; }
+  table { width:100%; border-collapse:collapse; margin:.6rem 0; font-size:.8rem; }
+  thead th { background:#1a1a1a; color:#fff; padding:6px 8px; font-weight:500; font-size:.68rem; text-transform:uppercase; }
   thead th:last-child, thead th:nth-child(3) { text-align:right; }
   thead th:nth-child(2) { text-align:center; }
-  .totals { margin-left:auto; width:260px; border-collapse:collapse; }
-  .totals tr:last-child td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; }
-  .notas { margin-top:1.2rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
-  .notas strong { display:block; margin-bottom:.3rem; font-size:.7rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+  .totals { margin-left:auto; width:240px; border-collapse:collapse; }
+  .totals tr:last-child td { font-weight:700; font-size:.9rem; border-top:2px solid #1a1a1a; padding-top:5px; }
+  .notas { margin-top:.7rem; padding:.6rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.72rem; color:#555; line-height:1.4; }
+  .notas strong { display:block; margin-bottom:.2rem; font-size:.62rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
 </style>
 </head>
 <body>
@@ -2812,6 +2815,10 @@ function descargarFactura(id) {
     </div>
   </div>
   <div style="text-align:right">
+    <div class="no-print" style="text-align:right;margin-bottom:.5rem">
+      <button onclick="window.print()" style="padding:.3rem 1rem;background:#E8521A;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+      <div style="font-size:9px;color:#aaa;margin-top:.2rem">Si ves más de 1 hoja → activa "Ajustar a página"</div>
+    </div>
     <div class="fac-num">${f.numero}</div>
     <div style="font-size:.8rem;color:#666;margin-top:.3rem">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
   </div>
@@ -2858,7 +2865,6 @@ function descargarFactura(id) {
 
 ${f.notas ? `<div class="notas"><strong>Notas</strong>${notasHtml}</div>` : ''}
 
-<script>window.addEventListener('load', () => setTimeout(window.print, 200));<\/script>
 </body></html>`;
 
   const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
