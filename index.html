@@ -2780,12 +2780,13 @@ function descargarFactura(id) {
 <title>${f.numero}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
-  @page { margin: 1cm; }
+  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
   html, body { height:auto; background:#fff; }
-  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; padding:1cm; }
-  .no-print { text-align:center; padding:.5rem; background:#f0f0f0; margin-bottom:.8rem; }
-  .no-print button { padding:.35rem 1.2rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; }
-  @media print { .no-print { display:none; } body { padding:0; } }
+  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; padding:1.2cm; }
+  .no-print { position:fixed; top:12px; right:12px; background:rgba(248,248,248,.97); border:1px solid #ddd; border-radius:8px; padding:.5rem .7rem; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .no-print button { display:block; padding:.35rem 1rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:11px; cursor:pointer; white-space:nowrap; }
+  .no-print small { display:block; font-size:9px; color:#aaa; margin-top:.25rem; text-align:center; }
+  @media print { .no-print { display:none !important; } body { padding:0; } }
   h1 { font-size:1.5rem; font-weight:300; letter-spacing:2px; }
   h1 strong { color:#E8521A; }
   .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.9rem; border-bottom:2px solid #E8521A; padding-bottom:.7rem; }
@@ -2815,9 +2816,9 @@ function descargarFactura(id) {
     </div>
   </div>
   <div style="text-align:right">
-    <div class="no-print" style="text-align:right;margin-bottom:.5rem">
-      <button onclick="window.print()" style="padding:.3rem 1rem;background:#E8521A;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
-      <div style="font-size:9px;color:#aaa;margin-top:.2rem">Si ves más de 1 hoja → activa "Ajustar a página"</div>
+    <div class="no-print">
+      <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+      <small>Si ves más de 1 hoja → "Ajustar a página"</small>
     </div>
     <div class="fac-num">${f.numero}</div>
     <div style="font-size:.8rem;color:#666;margin-top:.3rem">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
