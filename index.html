@@ -715,10 +715,12 @@
     .fb-proj { background: rgba(86,156,214,.15);  color: #56a0d3; }
 
     /* ── PRINT ──────────────────────────────────────── */
+    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+    #factPrintTarget { display: none; }
     @media print {
-      body * { visibility: hidden !important; }
+      body > *:not(#factPrintTarget) { display: none !important; }
+      #factPrintTarget { display: block !important; }
       .inv-paper, .inv-paper * { visibility: visible !important; }
-      .inv-paper { position: fixed; top: 0; left: 0; right: 0; padding: 1.5cm; background: #fff !important; }
     }
   </style>
 </head>
@@ -2757,121 +2759,104 @@ function descargarFactura(id) {
 
   const filas = conceptos.map(c => `
     <tr>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee">${c.descripcion || ''}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${c.unidades ?? 1}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmtN(c.precio_ud ?? 0)} €</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtN(c.total ?? 0)} €</td>
+      <td class="fp-td">${c.descripcion || ''}</td>
+      <td class="fp-td fp-center">${c.unidades ?? 1}</td>
+      <td class="fp-td fp-right">${fmtN(c.precio_ud ?? 0)} €</td>
+      <td class="fp-td fp-right fp-bold">${fmtN(c.total ?? 0)} €</td>
     </tr>`).join('');
 
   const igicFila = f.iva_pct > 0
-    ? `<tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#666">IGIC (${f.iva_pct}%)</td>
-           <td style="padding:5px 10px;text-align:right">${fmtN(igicAmt)} €</td></tr>` : '';
+    ? `<tr><td colspan="3" class="fp-tot-label">IGIC (${f.iva_pct}%)</td><td class="fp-tot-val">${fmtN(igicAmt)} €</td></tr>` : '';
 
   const irpfFila = f.irpf_pct > 0
-    ? `<tr><td colspan="3" style="padding:5px 10px;text-align:right;color:#c00">IRPF (−${f.irpf_pct}%)</td>
-           <td style="padding:5px 10px;text-align:right;color:#c00">−${fmtN(irpfAmt)} €</td></tr>` : '';
+    ? `<tr><td colspan="3" class="fp-tot-label fp-red">IRPF (−${f.irpf_pct}%)</td><td class="fp-tot-val fp-red">−${fmtN(irpfAmt)} €</td></tr>` : '';
 
   const notasHtml = (f.notas || '').replace(/\n/g, '<br>');
 
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>${f.numero}</title>
-<style>
-  * { box-sizing:border-box; margin:0; padding:0; }
-  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
-  html, body { height:auto; background:#fff; }
-  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; padding:1.2cm; }
-  .no-print { position:fixed; top:12px; right:12px; background:rgba(248,248,248,.97); border:1px solid #ddd; border-radius:8px; padding:.5rem .7rem; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.12); }
-  .no-print button { display:block; padding:.35rem 1rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:11px; cursor:pointer; white-space:nowrap; }
-  .no-print small { display:block; font-size:9px; color:#aaa; margin-top:.25rem; text-align:center; }
-  @media print { .no-print { display:none !important; } body { padding:0; } }
-  h1 { font-size:1.5rem; font-weight:300; letter-spacing:2px; }
-  h1 strong { color:#E8521A; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.9rem; border-bottom:2px solid #E8521A; padding-bottom:.7rem; }
-  .fac-num { font-size:1.1rem; font-weight:700; color:#E8521A; font-family:monospace; }
-  .parties { display:flex; justify-content:space-between; margin:.7rem 0; gap:1.5rem; }
-  .party { flex:1; }
-  .party-label { font-size:.6rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.2rem; border-bottom:1px solid #eee; padding-bottom:.15rem; }
-  .party-name { font-size:.85rem; font-weight:700; margin-bottom:.15rem; }
-  .party-detail { font-size:.72rem; color:#555; line-height:1.4; }
-  table { width:100%; border-collapse:collapse; margin:.6rem 0; font-size:.8rem; }
-  thead th { background:#1a1a1a; color:#fff; padding:6px 8px; font-weight:500; font-size:.68rem; text-transform:uppercase; }
-  thead th:last-child, thead th:nth-child(3) { text-align:right; }
-  thead th:nth-child(2) { text-align:center; }
-  .totals { margin-left:auto; width:240px; border-collapse:collapse; }
-  .totals tr:last-child td { font-weight:700; font-size:.9rem; border-top:2px solid #1a1a1a; padding-top:5px; }
-  .notas { margin-top:.7rem; padding:.6rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.72rem; color:#555; line-height:1.4; }
-  .notas strong { display:block; margin-bottom:.2rem; font-size:.62rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
-</style>
-</head>
-<body>
-<div class="header">
-  <div>
-    <h1>Julieta <strong>Bolullo</strong></h1>
-    <div style="font-size:.78rem;color:#666;margin-top:.3rem">
-      DNI: ${ME.dni} · ${ME.direccion} · ${ME.ciudad}<br>
-      ${ME.telefono} · ${ME.web}
+  // Inject scoped CSS into head (reuse if already exists)
+  let styleEl = document.getElementById('factPrintStyle');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'factPrintStyle';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    #factPrintTarget { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; }
+    #factPrintTarget * { box-sizing:border-box; margin:0; padding:0; }
+    .fp-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.9rem; border-bottom:2px solid #E8521A; padding-bottom:.7rem; }
+    .fp-h1 { font-size:1.5rem; font-weight:300; letter-spacing:2px; }
+    .fp-h1 strong { color:#E8521A; }
+    .fp-subhead { font-size:.72rem; color:#666; margin-top:.3rem; line-height:1.5; }
+    .fp-num { font-size:1.1rem; font-weight:700; color:#E8521A; font-family:monospace; }
+    .fp-fecha { font-size:.75rem; color:#666; margin-top:.3rem; }
+    .fp-parties { display:flex; justify-content:space-between; margin:.7rem 0; gap:1.5rem; }
+    .fp-party { flex:1; }
+    .fp-party-label { font-size:.6rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.2rem; border-bottom:1px solid #eee; padding-bottom:.15rem; }
+    .fp-party-name { font-size:.85rem; font-weight:700; margin-bottom:.15rem; }
+    .fp-party-detail { font-size:.72rem; color:#555; line-height:1.4; }
+    .fp-table { width:100%; border-collapse:collapse; margin:.6rem 0; font-size:.8rem; }
+    .fp-th { background:#1a1a1a; color:#fff; padding:6px 8px; font-weight:500; font-size:.68rem; text-transform:uppercase; }
+    .fp-td { padding:7px 8px; border-bottom:1px solid #eee; }
+    .fp-center { text-align:center; }
+    .fp-right { text-align:right; }
+    .fp-bold { font-weight:600; }
+    .fp-totals { margin-left:auto; width:240px; border-collapse:collapse; margin-top:.4rem; }
+    .fp-tot-label { padding:4px 8px; text-align:right; color:#666; font-size:.8rem; }
+    .fp-tot-val { padding:4px 8px; text-align:right; font-size:.8rem; }
+    .fp-red { color:#c00; }
+    .fp-total-row td { font-weight:700; font-size:.9rem; border-top:2px solid #1a1a1a; padding-top:5px; padding-bottom:4px; }
+    .fp-notas { margin-top:.7rem; padding:.6rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.72rem; color:#555; line-height:1.4; }
+    .fp-notas-label { display:block; margin-bottom:.2rem; font-size:.62rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+  `;
+
+  document.getElementById('factPrintTarget').innerHTML = `
+    <div class="fp-header">
+      <div>
+        <div class="fp-h1">Julieta <strong>Bolullo</strong></div>
+        <div class="fp-subhead">DNI: ${ME.dni} · ${ME.direccion} · ${ME.ciudad}<br>${ME.telefono} · ${ME.web}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="fp-num">${f.numero}</div>
+        <div class="fp-fecha">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
+      </div>
     </div>
-  </div>
-  <div style="text-align:right">
-    <div class="no-print">
-      <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-      <small>Si ves más de 1 hoja → "Ajustar a página"</small>
+    <div class="fp-parties">
+      <div class="fp-party">
+        <div class="fp-party-label">Emisor</div>
+        <div class="fp-party-name">${ME.nombre}</div>
+        <div class="fp-party-detail">DNI: ${ME.dni}<br>${ME.direccion}<br>${ME.ciudad}<br>Tel: ${ME.telefono}</div>
+      </div>
+      <div class="fp-party">
+        <div class="fp-party-label">Cliente / Destinatario</div>
+        <div class="fp-party-name">${f.cliente_nombre}</div>
+        <div class="fp-party-detail">${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}${(f.cliente_direccion || '').replace(/\n/g,'<br>')}</div>
+      </div>
     </div>
-    <div class="fac-num">${f.numero}</div>
-    <div style="font-size:.8rem;color:#666;margin-top:.3rem">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
-  </div>
-</div>
+    <table class="fp-table">
+      <thead><tr>
+        <th class="fp-th" style="text-align:left">Descripción</th>
+        <th class="fp-th fp-center">Uds.</th>
+        <th class="fp-th fp-right">Precio/ud</th>
+        <th class="fp-th fp-right">Total</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+    <table class="fp-totals">
+      <tbody>
+        <tr><td colspan="3" class="fp-tot-label">Base imponible</td><td class="fp-tot-val">${fmtN(f.base_imponible || 0)} €</td></tr>
+        ${igicFila}${irpfFila}
+        <tr class="fp-total-row"><td colspan="3" class="fp-tot-label" style="color:#1a1a1a">TOTAL A PERCIBIR</td><td class="fp-tot-val">${fmtN(f.total || 0)} €</td></tr>
+      </tbody>
+    </table>
+    ${f.notas ? `<div class="fp-notas"><span class="fp-notas-label">Notas</span>${notasHtml}</div>` : ''}
+  `;
 
-<div class="parties">
-  <div class="party">
-    <div class="party-label">Emisor</div>
-    <div class="party-name">${ME.nombre}</div>
-    <div class="party-detail">DNI: ${ME.dni}<br>${ME.direccion}<br>${ME.ciudad}<br>Tel: ${ME.telefono}</div>
-  </div>
-  <div class="party">
-    <div class="party-label">Cliente / Destinatario</div>
-    <div class="party-name">${f.cliente_nombre}</div>
-    <div class="party-detail">
-      ${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}
-      ${(f.cliente_direccion || '').replace(/\n/g,'<br>')}
-    </div>
-  </div>
-</div>
+  window.print();
 
-<table>
-  <thead>
-    <tr>
-      <th style="text-align:left">Descripción</th>
-      <th style="text-align:center">Uds.</th>
-      <th style="text-align:right">Precio/ud</th>
-      <th style="text-align:right">Total</th>
-    </tr>
-  </thead>
-  <tbody>${filas}</tbody>
-</table>
-
-<table class="totals">
-  <tbody>
-    <tr><td colspan="3" style="text-align:right;padding:5px 10px;color:#666">Base imponible</td>
-        <td style="text-align:right;padding:5px 10px">${fmtN(f.base_imponible || 0)} €</td></tr>
-    ${igicFila}
-    ${irpfFila}
-    <tr><td colspan="3" style="text-align:right;padding:5px 10px">TOTAL A PERCIBIR</td>
-        <td style="text-align:right;padding:5px 10px">${fmtN(f.total || 0)} €</td></tr>
-  </tbody>
-</table>
-
-${f.notas ? `<div class="notas"><strong>Notas</strong>${notasHtml}</div>` : ''}
-
-</body></html>`;
-
-  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, '_blank');
-  if (!win) { toast('Activa los popups para descargar el PDF', true); }
+  window.addEventListener('afterprint', function cleanup() {
+    document.getElementById('factPrintTarget').innerHTML = '';
+    window.removeEventListener('afterprint', cleanup);
+  }, { once: true });
 }
 
 /* ════════════════════════════════════════════════════
@@ -4218,5 +4203,6 @@ async function init() {
 
 init();
 </script>
+<div id="factPrintTarget"></div>
 </body>
 </html>
