@@ -2403,6 +2403,7 @@ async function loadFacturas() {
         <button class="btn-icon" onclick="event.stopPropagation();descargarFactura('${f.id}')" title="Descargar PDF">📄</button>
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();duplicarFactura('${f.id}')" style="font-size:.7rem;padding:.2rem .5rem">Duplicar</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditFactura('${f.id}')" title="Editar factura">✏️</button>
+        <button class="btn-icon" onclick="event.stopPropagation();eliminarFactura('${f.id}','${f.numero}')" title="Eliminar factura" style="color:#f87171">🗑️</button>
       </div>
     </div>
   `).join('');
@@ -3138,6 +3139,7 @@ async function loadPresupuestos() {
                </div>`}
         <button class="btn-icon" onclick="event.stopPropagation();descargarPresupuesto('${p.id}')" title="Descargar PDF">📄</button>
         <button class="btn-icon" onclick="event.stopPropagation();openEditPresupuesto('${p.id}')" title="Editar">✏️</button>
+        <button class="btn-icon" onclick="event.stopPropagation();eliminarPresupuesto('${p.id}','${p.numero}')" title="Eliminar presupuesto" style="color:#f87171">🗑️</button>
       </div>
     </div>
   `).join('');
@@ -3148,6 +3150,22 @@ async function cambiarEstadoPres(id, nuevoEstado) {
   if (error) { toast('Error: ' + error.message, true); return; }
   toast(nuevoEstado === 'aceptado' ? '✓ Presupuesto aceptado' : 'Presupuesto rechazado');
   loadPresupuestos();
+}
+
+async function eliminarPresupuesto(id, numero) {
+  if (!confirm(`¿Eliminar el presupuesto ${numero}? Esta acción no se puede deshacer.`)) return;
+  const { error } = await db.from('presupuestos').delete().eq('id', id);
+  if (error) { toast('Error al eliminar: ' + error.message, true); return; }
+  toast('Presupuesto eliminado');
+  loadPresupuestos();
+}
+
+async function eliminarFactura(id, numero) {
+  if (!confirm(`¿Eliminar la factura ${numero}? Esta acción no se puede deshacer.`)) return;
+  const { error } = await db.from('facturas').delete().eq('id', id);
+  if (error) { toast('Error al eliminar: ' + error.message, true); return; }
+  toast('Factura eliminada');
+  loadFacturas();
 }
 
 function descargarPresupuesto(id) {
