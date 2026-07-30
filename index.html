@@ -715,12 +715,10 @@
     .fb-proj { background: rgba(86,156,214,.15);  color: #56a0d3; }
 
     /* ── PRINT ──────────────────────────────────────── */
-    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
-    #factPrintTarget { display: none; }
     @media print {
-      body > *:not(#factPrintTarget) { display: none !important; }
-      #factPrintTarget { display: block !important; }
+      body * { visibility: hidden !important; }
       .inv-paper, .inv-paper * { visibility: visible !important; }
+      .inv-paper { position: fixed; top: 0; left: 0; right: 0; padding: 1.5cm; background: #fff !important; }
     }
   </style>
 </head>
@@ -2774,90 +2772,94 @@ function descargarFactura(id) {
 
   const notasHtml = (f.notas || '').replace(/\n/g, '<br>');
 
-  // Inject scoped CSS into head (reuse if already exists)
-  let styleEl = document.getElementById('factPrintStyle');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'factPrintStyle';
-    document.head.appendChild(styleEl);
-  }
-  styleEl.textContent = `
-    #factPrintTarget { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:13px; }
-    #factPrintTarget * { box-sizing:border-box; margin:0; padding:0; }
-    .fp-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.2rem; border-bottom:2px solid #E8521A; padding-bottom:1rem; }
-    .fp-h1 { font-size:1.8rem; font-weight:300; letter-spacing:2px; }
-    .fp-h1 strong { color:#E8521A; }
-    .fp-subhead { font-size:.78rem; color:#666; margin-top:.4rem; line-height:1.6; }
-    .fp-num { font-size:1.3rem; font-weight:700; color:#E8521A; font-family:monospace; }
-    .fp-fecha { font-size:.8rem; color:#666; margin-top:.4rem; }
-    .fp-parties { display:flex; justify-content:space-between; margin:1rem 0; gap:2rem; }
-    .fp-party { flex:1; }
-    .fp-party-label { font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.3rem; border-bottom:1px solid #eee; padding-bottom:.2rem; }
-    .fp-party-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
-    .fp-party-detail { font-size:.78rem; color:#555; line-height:1.5; }
-    .fp-table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.85rem; }
-    .fp-th { background:#1a1a1a; color:#fff; padding:8px 10px; font-weight:500; font-size:.72rem; text-transform:uppercase; }
-    .fp-td { padding:9px 10px; border-bottom:1px solid #eee; }
-    .fp-center { text-align:center; }
-    .fp-right { text-align:right; }
-    .fp-bold { font-weight:600; }
-    .fp-totals { margin-left:auto; width:260px; border-collapse:collapse; margin-top:.5rem; }
-    .fp-tot-label { padding:5px 10px; text-align:right; color:#666; font-size:.85rem; }
-    .fp-tot-val { padding:5px 10px; text-align:right; font-size:.85rem; }
-    .fp-red { color:#c00; }
-    .fp-total-row td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; padding-bottom:5px; }
-    .fp-notas { margin-top:1rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
-    .fp-notas-label { display:block; margin-bottom:.3rem; font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
-  `;
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${f.numero}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+  html, body { height:auto; background:#fff; }
+  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:13px; }
+  .no-print { position:fixed; top:12px; right:12px; background:rgba(248,248,248,.97); border:1px solid #ddd; border-radius:8px; padding:.5rem .7rem; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .no-print button { display:block; padding:.4rem 1.1rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; white-space:nowrap; }
+  .no-print small { display:block; font-size:9px; color:#aaa; margin-top:.25rem; text-align:center; }
+  @media print { .no-print { display:none !important; } }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.2rem; border-bottom:2px solid #E8521A; padding-bottom:1rem; }
+  h1 { font-size:1.8rem; font-weight:300; letter-spacing:2px; }
+  h1 strong { color:#E8521A; }
+  .subhead { font-size:.78rem; color:#666; margin-top:.4rem; line-height:1.6; }
+  .fac-num { font-size:1.3rem; font-weight:700; color:#E8521A; font-family:monospace; }
+  .fac-fecha { font-size:.8rem; color:#666; margin-top:.4rem; }
+  .parties { display:flex; justify-content:space-between; margin:1rem 0; gap:2rem; }
+  .party { flex:1; }
+  .party-label { font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.3rem; border-bottom:1px solid #eee; padding-bottom:.2rem; }
+  .party-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
+  .party-detail { font-size:.78rem; color:#555; line-height:1.5; }
+  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.85rem; }
+  thead th { background:#1a1a1a; color:#fff; padding:8px 10px; font-weight:500; font-size:.72rem; text-transform:uppercase; }
+  tbody td { padding:9px 10px; border-bottom:1px solid #eee; }
+  .totals { margin-left:auto; width:260px; border-collapse:collapse; margin-top:.5rem; }
+  .totals td { padding:5px 10px; }
+  .tot-label { text-align:right; color:#666; }
+  .tot-val { text-align:right; }
+  .tot-red { color:#c00; }
+  .tot-final td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; }
+  .notas { margin-top:1rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
+  .notas-label { display:block; margin-bottom:.3rem; font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+  <small>Solo debe salir 1 página</small>
+</div>
+<div class="header">
+  <div>
+    <h1>Julieta <strong>Bolullo</strong></h1>
+    <div class="subhead">DNI: ${ME.dni} · ${ME.direccion} · ${ME.ciudad}<br>${ME.telefono} · ${ME.web}</div>
+  </div>
+  <div style="text-align:right">
+    <div class="fac-num">${f.numero}</div>
+    <div class="fac-fecha">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
+  </div>
+</div>
+<div class="parties">
+  <div class="party">
+    <div class="party-label">Emisor</div>
+    <div class="party-name">${ME.nombre}</div>
+    <div class="party-detail">DNI: ${ME.dni}<br>${ME.direccion}<br>${ME.ciudad}<br>Tel: ${ME.telefono}</div>
+  </div>
+  <div class="party">
+    <div class="party-label">Cliente / Destinatario</div>
+    <div class="party-name">${f.cliente_nombre}</div>
+    <div class="party-detail">${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}${(f.cliente_direccion||'').replace(/\n/g,'<br>')}</div>
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th style="text-align:left">Descripción</th>
+    <th style="text-align:center">Uds.</th>
+    <th style="text-align:right">Precio/ud</th>
+    <th style="text-align:right">Total</th>
+  </tr></thead>
+  <tbody>${filas}</tbody>
+</table>
+<table class="totals">
+  <tbody>
+    <tr><td class="tot-label">Base imponible</td><td class="tot-val">${fmtN(f.base_imponible||0)} €</td></tr>
+    ${igicFila}${irpfFila}
+    <tr class="tot-final"><td class="tot-label" style="color:#1a1a1a">TOTAL A PERCIBIR</td><td class="tot-val">${fmtN(f.total||0)} €</td></tr>
+  </tbody>
+</table>
+${f.notas ? `<div class="notas"><span class="notas-label">Notas</span>${notasHtml}</div>` : ''}
+</body></html>`;
 
-  document.getElementById('factPrintTarget').innerHTML = `
-    <div class="fp-header">
-      <div>
-        <div class="fp-h1">Julieta <strong>Bolullo</strong></div>
-        <div class="fp-subhead">DNI: ${ME.dni} · ${ME.direccion} · ${ME.ciudad}<br>${ME.telefono} · ${ME.web}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="fp-num">${f.numero}</div>
-        <div class="fp-fecha">Fecha: <strong>${fmtD(f.fecha)}</strong></div>
-      </div>
-    </div>
-    <div class="fp-parties">
-      <div class="fp-party">
-        <div class="fp-party-label">Emisor</div>
-        <div class="fp-party-name">${ME.nombre}</div>
-        <div class="fp-party-detail">DNI: ${ME.dni}<br>${ME.direccion}<br>${ME.ciudad}<br>Tel: ${ME.telefono}</div>
-      </div>
-      <div class="fp-party">
-        <div class="fp-party-label">Cliente / Destinatario</div>
-        <div class="fp-party-name">${f.cliente_nombre}</div>
-        <div class="fp-party-detail">${f.cliente_nif ? 'NIF/CIF: ' + f.cliente_nif + '<br>' : ''}${(f.cliente_direccion || '').replace(/\n/g,'<br>')}</div>
-      </div>
-    </div>
-    <table class="fp-table">
-      <thead><tr>
-        <th class="fp-th" style="text-align:left">Descripción</th>
-        <th class="fp-th fp-center">Uds.</th>
-        <th class="fp-th fp-right">Precio/ud</th>
-        <th class="fp-th fp-right">Total</th>
-      </tr></thead>
-      <tbody>${filas}</tbody>
-    </table>
-    <table class="fp-totals">
-      <tbody>
-        <tr><td colspan="3" class="fp-tot-label">Base imponible</td><td class="fp-tot-val">${fmtN(f.base_imponible || 0)} €</td></tr>
-        ${igicFila}${irpfFila}
-        <tr class="fp-total-row"><td colspan="3" class="fp-tot-label" style="color:#1a1a1a">TOTAL A PERCIBIR</td><td class="fp-tot-val">${fmtN(f.total || 0)} €</td></tr>
-      </tbody>
-    </table>
-    ${f.notas ? `<div class="fp-notas"><span class="fp-notas-label">Notas</span>${notasHtml}</div>` : ''}
-  `;
-
-  window.print();
-
-  window.addEventListener('afterprint', function cleanup() {
-    document.getElementById('factPrintTarget').innerHTML = '';
-    window.removeEventListener('afterprint', cleanup);
-  }, { once: true });
+  const win = window.open('', '_blank');
+  if (!win) { toast('Activa los popups para descargar el PDF', true); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 /* ════════════════════════════════════════════════════
@@ -4221,6 +4223,5 @@ async function init() {
 
 init();
 </script>
-<div id="factPrintTarget"></div>
 </body>
 </html>
