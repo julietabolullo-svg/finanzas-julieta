@@ -2782,32 +2782,32 @@ function descargarFactura(id) {
     document.head.appendChild(styleEl);
   }
   styleEl.textContent = `
-    #factPrintTarget { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:11px; }
+    #factPrintTarget { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:13px; }
     #factPrintTarget * { box-sizing:border-box; margin:0; padding:0; }
-    .fp-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.9rem; border-bottom:2px solid #E8521A; padding-bottom:.7rem; }
-    .fp-h1 { font-size:1.5rem; font-weight:300; letter-spacing:2px; }
+    .fp-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.2rem; border-bottom:2px solid #E8521A; padding-bottom:1rem; }
+    .fp-h1 { font-size:1.8rem; font-weight:300; letter-spacing:2px; }
     .fp-h1 strong { color:#E8521A; }
-    .fp-subhead { font-size:.72rem; color:#666; margin-top:.3rem; line-height:1.5; }
-    .fp-num { font-size:1.1rem; font-weight:700; color:#E8521A; font-family:monospace; }
-    .fp-fecha { font-size:.75rem; color:#666; margin-top:.3rem; }
-    .fp-parties { display:flex; justify-content:space-between; margin:.7rem 0; gap:1.5rem; }
+    .fp-subhead { font-size:.78rem; color:#666; margin-top:.4rem; line-height:1.6; }
+    .fp-num { font-size:1.3rem; font-weight:700; color:#E8521A; font-family:monospace; }
+    .fp-fecha { font-size:.8rem; color:#666; margin-top:.4rem; }
+    .fp-parties { display:flex; justify-content:space-between; margin:1rem 0; gap:2rem; }
     .fp-party { flex:1; }
-    .fp-party-label { font-size:.6rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.2rem; border-bottom:1px solid #eee; padding-bottom:.15rem; }
-    .fp-party-name { font-size:.85rem; font-weight:700; margin-bottom:.15rem; }
-    .fp-party-detail { font-size:.72rem; color:#555; line-height:1.4; }
-    .fp-table { width:100%; border-collapse:collapse; margin:.6rem 0; font-size:.8rem; }
-    .fp-th { background:#1a1a1a; color:#fff; padding:6px 8px; font-weight:500; font-size:.68rem; text-transform:uppercase; }
-    .fp-td { padding:7px 8px; border-bottom:1px solid #eee; }
+    .fp-party-label { font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:.3rem; border-bottom:1px solid #eee; padding-bottom:.2rem; }
+    .fp-party-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
+    .fp-party-detail { font-size:.78rem; color:#555; line-height:1.5; }
+    .fp-table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.85rem; }
+    .fp-th { background:#1a1a1a; color:#fff; padding:8px 10px; font-weight:500; font-size:.72rem; text-transform:uppercase; }
+    .fp-td { padding:9px 10px; border-bottom:1px solid #eee; }
     .fp-center { text-align:center; }
     .fp-right { text-align:right; }
     .fp-bold { font-weight:600; }
-    .fp-totals { margin-left:auto; width:240px; border-collapse:collapse; margin-top:.4rem; }
-    .fp-tot-label { padding:4px 8px; text-align:right; color:#666; font-size:.8rem; }
-    .fp-tot-val { padding:4px 8px; text-align:right; font-size:.8rem; }
+    .fp-totals { margin-left:auto; width:260px; border-collapse:collapse; margin-top:.5rem; }
+    .fp-tot-label { padding:5px 10px; text-align:right; color:#666; font-size:.85rem; }
+    .fp-tot-val { padding:5px 10px; text-align:right; font-size:.85rem; }
     .fp-red { color:#c00; }
-    .fp-total-row td { font-weight:700; font-size:.9rem; border-top:2px solid #1a1a1a; padding-top:5px; padding-bottom:4px; }
-    .fp-notas { margin-top:.7rem; padding:.6rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.72rem; color:#555; line-height:1.4; }
-    .fp-notas-label { display:block; margin-bottom:.2rem; font-size:.62rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+    .fp-total-row td { font-weight:700; font-size:1rem; border-top:2px solid #1a1a1a; padding-top:6px; padding-bottom:5px; }
+    .fp-notas { margin-top:1rem; padding:.8rem; background:#f9f9f9; border-left:3px solid #E8521A; font-size:.78rem; color:#555; line-height:1.5; }
+    .fp-notas-label { display:block; margin-bottom:.3rem; font-size:.65rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
   `;
 
   document.getElementById('factPrintTarget').innerHTML = `
