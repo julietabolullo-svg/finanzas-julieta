@@ -2609,7 +2609,6 @@ function setFactRegimen(r) {
   $('fRegimen').value = r;
   $('fRegimenIgic').classList.toggle('active',        r === 'igic');
   $('fRegimenSin').classList.toggle('active',         r === 'sin_impuesto');
-  $('fRegimenCurso').classList.toggle('active',       r === 'sin_retencion');
   $('fRegimenParticular').classList.toggle('active',  r === 'particular');
   $('fIgicRow').style.display = (r === 'igic' || r === 'particular') ? '' : 'none';
   $('fIrpfRow').style.display = (r === 'sin_retencion' || r === 'particular') ? 'none' : '';
