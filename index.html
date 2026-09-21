@@ -1244,6 +1244,7 @@
         <button type="button" class="regimen-btn active" id="fRegimenIgic" onclick="setFactRegimen('igic')">🏝️ Canarias — IGIC 7%</button>
         <button type="button" class="regimen-btn" id="fRegimenSin" onclick="setFactRegimen('sin_impuesto')">🇪🇸 Península — Sin impuesto</button>
         <button type="button" class="regimen-btn" id="fRegimenCurso" onclick="setFactRegimen('sin_retencion')">🎓 Formación — Sin retención</button>
+        <button type="button" class="regimen-btn" id="fRegimenParticular" onclick="setFactRegimen('particular')">👤 Particular — IGIC sin IRPF</button>
       </div>
       <input type="hidden" id="fRegimen" value="igic">
 
@@ -2435,7 +2436,8 @@ function openEditFactura(id) {
   }
 
   // Regimen
-  const regimen = f.iva_pct > 0 ? 'igic'
+  const regimen = f.iva_pct > 0 && f.irpf_pct === 0 ? 'particular'
+                : f.iva_pct > 0 ? 'igic'
                 : f.irpf_pct === 0 ? 'sin_retencion'
                 : 'sin_impuesto';
   setFactRegimen(regimen);
@@ -2473,7 +2475,8 @@ async function duplicarFactura(id) {
   }
 
   // Regimen
-  const regimen = f.iva_pct > 0 ? 'igic'
+  const regimen = f.iva_pct > 0 && f.irpf_pct === 0 ? 'particular'
+                : f.iva_pct > 0 ? 'igic'
                 : f.irpf_pct === 0 ? 'sin_retencion'
                 : 'sin_impuesto';
   setFactRegimen(regimen);
@@ -2605,19 +2608,20 @@ function getConceptos() {
 
 function setFactRegimen(r) {
   $('fRegimen').value = r;
-  $('fRegimenIgic').classList.toggle('active',   r === 'igic');
-  $('fRegimenSin').classList.toggle('active',    r === 'sin_impuesto');
-  $('fRegimenCurso').classList.toggle('active',  r === 'sin_retencion');
-  $('fIgicRow').style.display = r === 'igic' ? '' : 'none';
-  $('fIrpfRow').style.display = r === 'sin_retencion' ? 'none' : '';
+  $('fRegimenIgic').classList.toggle('active',        r === 'igic');
+  $('fRegimenSin').classList.toggle('active',         r === 'sin_impuesto');
+  $('fRegimenCurso').classList.toggle('active',       r === 'sin_retencion');
+  $('fRegimenParticular').classList.toggle('active',  r === 'particular');
+  $('fIgicRow').style.display = (r === 'igic' || r === 'particular') ? '' : 'none';
+  $('fIrpfRow').style.display = (r === 'sin_retencion' || r === 'particular') ? 'none' : '';
   calcTotals();
 }
 
 function calcTotals() {
   const base    = getConceptos().reduce((s, c) => s + c.total, 0);
   const reg     = $('fRegimen').value;
-  const igic    = reg === 'igic' ? base * 0.07 : 0;
-  const irpf    = reg === 'sin_retencion' ? 0 : base * 0.15;
+  const igic    = (reg === 'igic' || reg === 'particular') ? base * 0.07 : 0;
+  const irpf    = (reg === 'sin_retencion' || reg === 'particular') ? 0 : base * 0.15;
   const total   = base + igic - irpf;
   $('pBase').textContent  = fmt(base);
   $('pIgic').textContent  = fmt(igic);
@@ -2650,8 +2654,8 @@ $('factForm').addEventListener('submit', async e => {
 
   const base  = conceptos.reduce((s, c) => s + c.total, 0);
   const reg   = $('fRegimen').value;
-  const igic  = reg === 'igic' ? base * 0.07 : 0;
-  const irpf  = reg === 'sin_retencion' ? 0 : base * 0.15;
+  const igic  = (reg === 'igic' || reg === 'particular') ? base * 0.07 : 0;
+  const irpf  = (reg === 'sin_retencion' || reg === 'particular') ? 0 : base * 0.15;
   const total = base + igic - irpf;
 
   const editId = $('editFacturaId').value;
@@ -2663,8 +2667,8 @@ $('factForm').addEventListener('submit', async e => {
     cliente_direccion: cliDir,
     conceptos,
     base_imponible:    +base.toFixed(2),
-    iva_pct:           reg === 'igic' ? 7 : 0,
-    irpf_pct:          reg === 'sin_retencion' ? 0 : 15,
+    iva_pct:           (reg === 'igic' || reg === 'particular') ? 7 : 0,
+    irpf_pct:          (reg === 'sin_retencion' || reg === 'particular') ? 0 : 15,
     total:             +total.toFixed(2),
     notas:             $('fNotas').value,
   };
