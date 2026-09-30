@@ -3198,12 +3198,13 @@ function onIgicSelChange() {
 }
 
 const PROJ_RULES = [
-  { keywords: ['anthropic', 'antropic', 'claude'], proj: 'pliquia' },
+  // Solo las facturas de Anthropic Console (llamadas API) van a Pliquia
+  { test: s => (s.includes('anthropic') || s.includes('antropic')) && s.includes('console'), proj: 'pliquia' },
 ];
 
 function autoDetectProyecto(prov) {
   const lower = prov.toLowerCase();
-  const match = PROJ_RULES.find(r => r.keywords.some(k => lower.includes(k)));
+  const match = PROJ_RULES.find(r => r.test(lower));
   if (match && $('movProyecto')) {
     $('movProyecto').value = match.proj;
   }
