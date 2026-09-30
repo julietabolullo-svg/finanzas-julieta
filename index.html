@@ -935,6 +935,7 @@
           </div>
 
           <button type="submit" class="btn btn-primary btn-full" style="margin-top:.3rem">Guardar movimiento</button>
+          <button type="button" class="btn btn-ghost btn-full" style="margin-top:.45rem;font-size:.8rem" onclick="openMultiGasto()">＋ Varios gastos a la vez</button>
         </form>
 
         <hr class="divider">
@@ -1451,6 +1452,26 @@
     </div>
 
     <div class="inv-paper" id="invPaper"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL: MULTI-GASTO ═══════════════ -->
+<div class="overlay hidden" id="overlayMultiGasto">
+  <div class="modal" style="max-width:720px;width:95vw">
+    <div class="modal-head">
+      <div class="modal-title">Varios gastos a la vez</div>
+      <button class="modal-close" onclick="closeM('overlayMultiGasto')">&times;</button>
+    </div>
+    <div style="font-size:.75rem;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:1rem">
+      Cada fila se guarda en el mes de su fecha. Campos mínimos: fecha, descripción e importe.
+    </div>
+    <div id="mgTabla" style="display:flex;flex-direction:column;gap:.5rem"></div>
+    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.6rem;width:100%" onclick="mgAddFila()">＋ Añadir fila</button>
+    <div style="display:flex;gap:.75rem;margin-top:1.2rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeM('overlayMultiGasto')">Cancelar</button>
+      <button class="btn btn-primary" id="btnMgGuardar" onclick="mgGuardarTodos()">Guardar todos</button>
+    </div>
+    <div id="mgStatus" style="margin-top:.6rem;font-family:'DM Mono',monospace;font-size:.73rem;color:var(--muted);min-height:1.2rem"></div>
   </div>
 </div>
 
@@ -2338,6 +2359,106 @@ async function _doInsertMov(mov) {
     toast('Movimiento guardado ✓');
   }
   loadDashboard();
+}
+
+/* ════════════════════════════════════════════════════
+   MULTI-GASTO
+════════════════════════════════════════════════════ */
+const MG_TIPOS = [
+  { v: '',                    l: '— tipo —' },
+  { v: 'herramientas_ia',     l: '🤖 Herramientas IA' },
+  { v: 'herramientas_espacios', l: '☁️ Espacios / correo' },
+  { v: 'proveedores',         l: '👤 Proveedores' },
+  { v: 'gestor_impuestos',    l: '🧾 Gestor / Asesoría' },
+  { v: 'seguro_medico',       l: '🏥 Seguro médico' },
+  { v: 'telefono',            l: '📱 Teléfono' },
+  { v: 'tecnologia',          l: '💻 Tecnología' },
+  { v: 'autonomo',            l: '📄 Cuota autónomo' },
+  { v: 'publicidad',          l: '📢 Publicidad' },
+  { v: 'comidas',             l: '🍽️ Comida' },
+  { v: 'transporte',          l: '🚗 Transporte' },
+  { v: 'gasolina',            l: '⛽ Gasolina' },
+  { v: 'otros',               l: 'Otros' },
+];
+
+let mgN = 0;
+
+function openMultiGasto() {
+  $('mgTabla').innerHTML = '';
+  mgN = 0;
+  mgAddFila();
+  mgAddFila();
+  mgAddFila();
+  $('mgStatus').textContent = '';
+  openM('overlayMultiGasto');
+}
+
+function mgAddFila() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const id  = ++mgN;
+  const opts = MG_TIPOS.map(t => `<option value="${t.v}">${t.l}</option>`).join('');
+  const fila = document.createElement('div');
+  fila.id = `mgFila${id}`;
+  fila.style.cssText = 'display:grid;grid-template-columns:120px 1fr 160px 90px 28px;gap:.35rem;align-items:center';
+  fila.innerHTML = `
+    <input type="date" class="mg-fecha" value="${hoy}" style="font-size:.75rem;padding:.3rem .45rem">
+    <input type="text" class="mg-desc" placeholder="Descripción" style="font-size:.75rem;padding:.3rem .45rem">
+    <select class="mg-tipo" style="font-size:.72rem;padding:.3rem .35rem">${opts}</select>
+    <input type="number" class="mg-importe" step="0.01" min="0" placeholder="0.00" style="font-size:.75rem;padding:.3rem .45rem;text-align:right">
+    <button type="button" onclick="mgBorraFila(${id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1" title="Quitar">×</button>
+  `;
+  $('mgTabla').appendChild(fila);
+}
+
+function mgBorraFila(id) {
+  const el = $(`mgFila${id}`);
+  if (el) el.remove();
+}
+
+async function mgGuardarTodos() {
+  const filas = $('mgTabla').querySelectorAll('[id^="mgFila"]');
+  const movs  = [];
+  for (const fila of filas) {
+    const fecha   = fila.querySelector('.mg-fecha').value;
+    const desc    = fila.querySelector('.mg-desc').value.trim();
+    const tipo    = fila.querySelector('.mg-tipo').value;
+    const imp     = parseFloat(fila.querySelector('.mg-importe').value);
+    if (!fecha || !desc || !imp) continue; // filas vacías: ignorar
+    const fiscal  = { t: tipo || 'otros' };
+    movs.push({ tipo: 'gasto', bloque: 'empresa', fecha, descripcion: encGasto(desc, fiscal), importe: Math.abs(imp) });
+  }
+  if (!movs.length) { $('mgStatus').textContent = '⚠️ Ninguna fila tiene fecha, descripción e importe.'; return; }
+
+  $('btnMgGuardar').disabled = true;
+  $('mgStatus').textContent = `Guardando ${movs.length} gasto(s)…`;
+
+  // Asignar categorías
+  const TIPO_NOMBRES = {
+    herramientas_ia: 'Herramientas Agencia IA', herramientas_espacios: 'Tecnología',
+    proveedores: 'Proveedores', gestor_impuestos: 'Gestor e impuestos',
+    seguro_medico: 'Seguro', telefono: 'Tecnología', tecnologia: 'Tecnología',
+    autonomo: 'Factura autónomo', publicidad: 'Publicidad / Marketing',
+    comidas: 'Comida / Restauración', transporte: 'Transporte / Viaje',
+    gasolina: 'Gasolina', otros: 'Otros gastos',
+  };
+  for (const mov of movs) {
+    const { fiscal } = decGasto(mov.descripcion);
+    const catName = TIPO_NOMBRES[fiscal.t] || 'Otros gastos';
+    let cat = cats.find(c => c.nombre.toLowerCase() === catName.toLowerCase());
+    if (!cat) {
+      const { data: nc } = await db.from('categorias').insert({ nombre: catName, bloque: 'empresa' }).select('id').single();
+      if (nc) { await loadCats(); cat = cats.find(c => c.id === nc.id); }
+    }
+    if (cat) mov.categoria_id = cat.id;
+  }
+
+  const { error } = await db.from('movimientos').insert(movs);
+  $('btnMgGuardar').disabled = false;
+  if (error) { $('mgStatus').textContent = '❌ Error: ' + error.message; return; }
+
+  closeM('overlayMultiGasto');
+  loadDashboard();
+  toast(`${movs.length} gasto(s) guardados ✓`);
 }
 
 /* ════════════════════════════════════════════════════
