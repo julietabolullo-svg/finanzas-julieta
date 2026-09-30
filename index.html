@@ -1463,7 +1463,7 @@
       <button class="modal-close" onclick="closeM('overlayMultiGasto')">&times;</button>
     </div>
     <div style="font-size:.75rem;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:1rem">
-      Cada fila se guarda en el mes de su fecha. Campos mínimos: fecha, descripción e importe.
+      Escribe descripción e importe. La fecha la leo del texto ("Spotify sep", "recibo 12/09"…); si no la encuentro, uso hoy.
     </div>
     <div id="mgTabla" style="display:flex;flex-direction:column;gap:.5rem"></div>
     <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.6rem;width:100%" onclick="mgAddFila()">＋ Añadir fila</button>
@@ -2393,16 +2393,58 @@ function openMultiGasto() {
   openM('overlayMultiGasto');
 }
 
+/* Extrae fecha (YYYY-MM-DD) del texto libre; si no encuentra, devuelve hoy */
+function mgParseFecha(texto) {
+  const hoy = new Date();
+  const y   = hoy.getFullYear();
+  const t   = texto.toLowerCase();
+
+  // DD/MM/YYYY o DD/MM/YY
+  let m = t.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (m) {
+    const yy = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
+    return `${yy}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  // DD/MM  →  año actual
+  m = t.match(/\b(\d{1,2})[\/\-](\d{1,2})\b/);
+  if (m) return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+
+  const MESES = {
+    ene:1,enero:1, feb:2,febrero:2, mar:3,marzo:3,
+    abr:4,abril:4, may:5,mayo:5,   jun:6,junio:6,
+    jul:7,julio:7, ago:8,agosto:8, sep:9,sept:9,septiembre:9,
+    oct:10,octubre:10, nov:11,noviembre:11, dic:12,diciembre:12,
+  };
+  // "15 sep 2026" o "15 septiembre"
+  m = t.match(/\b(\d{1,2})\s+([a-záéíóú]{3,})\s*(\d{4})?\b/);
+  if (m) {
+    const mes = MESES[m[2].slice(0,9)];
+    if (mes) {
+      const yy = m[3] ? parseInt(m[3]) : y;
+      return `${yy}-${String(mes).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }
+  }
+  // "sep 2026" o "septiembre 2026" → día 1
+  m = t.match(/\b([a-záéíóú]{3,})\s+(\d{4})\b/);
+  if (m) {
+    const mes = MESES[m[1].slice(0,9)];
+    if (mes) return `${m[2]}-${String(mes).padStart(2,'0')}-01`;
+  }
+  // solo nombre de mes → mes actual del año en curso, día 1
+  for (const [k, v] of Object.entries(MESES)) {
+    if (t.includes(k)) return `${y}-${String(v).padStart(2,'0')}-01`;
+  }
+  return hoy.toISOString().slice(0, 10); // fallback: hoy
+}
+
 function mgAddFila() {
-  const hoy = new Date().toISOString().slice(0, 10);
   const id  = ++mgN;
   const opts = MG_TIPOS.map(t => `<option value="${t.v}">${t.l}</option>`).join('');
   const fila = document.createElement('div');
   fila.id = `mgFila${id}`;
-  fila.style.cssText = 'display:grid;grid-template-columns:120px 1fr 160px 90px 28px;gap:.35rem;align-items:center';
+  fila.style.cssText = 'display:grid;grid-template-columns:1fr 160px 90px 28px;gap:.35rem;align-items:center';
   fila.innerHTML = `
-    <input type="date" class="mg-fecha" value="${hoy}" style="font-size:.75rem;padding:.3rem .45rem">
-    <input type="text" class="mg-desc" placeholder="Descripción" style="font-size:.75rem;padding:.3rem .45rem">
+    <input type="text" class="mg-desc" placeholder="Descripción (la fecha se lee del texto)" style="font-size:.75rem;padding:.3rem .45rem">
     <select class="mg-tipo" style="font-size:.72rem;padding:.3rem .35rem">${opts}</select>
     <input type="number" class="mg-importe" step="0.01" min="0" placeholder="0.00" style="font-size:.75rem;padding:.3rem .45rem;text-align:right">
     <button type="button" onclick="mgBorraFila(${id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1" title="Quitar">×</button>
@@ -2419,11 +2461,11 @@ async function mgGuardarTodos() {
   const filas = $('mgTabla').querySelectorAll('[id^="mgFila"]');
   const movs  = [];
   for (const fila of filas) {
-    const fecha   = fila.querySelector('.mg-fecha').value;
     const desc    = fila.querySelector('.mg-desc').value.trim();
     const tipo    = fila.querySelector('.mg-tipo').value;
     const imp     = parseFloat(fila.querySelector('.mg-importe').value);
-    if (!fecha || !desc || !imp) continue; // filas vacías: ignorar
+    if (!desc || !imp) continue; // filas vacías: ignorar
+    const fecha   = mgParseFecha(desc);
     const fiscal  = { t: tipo || 'otros' };
     movs.push({ tipo: 'gasto', bloque: 'empresa', fecha, descripcion: encGasto(desc, fiscal), importe: Math.abs(imp) });
   }
