@@ -3033,31 +3033,12 @@ ${f.notas ? `<div class="notas"><span class="notas-label">Notas</span>${notasHtm
 }
 
 function printViaIframe(html) {
-  // Parsear el HTML de la factura y extraer CSS + contenido del body
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(html, 'text/html');
-  const css    = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n')
-                   .replace(/\bbody\b/g, '#_pc'); // aplicar estilos de body a nuestro contenedor
-  const inner  = doc.body.innerHTML;
-
-  // Inyectar estilo de impresión: ocultar toda la app, mostrar solo #_pc
-  const styleEl = document.createElement('style');
-  styleEl.textContent =
-    '@media print{body>*:not(#_pc){display:none!important}#_pc{display:block!important}}\n' + css;
-
-  // Inyectar contenido de la factura
-  const container = document.createElement('div');
-  container.id = '_pc';
-  container.style.display = 'none'; // invisible en pantalla
-  container.innerHTML = inner;
-
-  document.head.appendChild(styleEl);
-  document.body.appendChild(container);
-
-  // Limpiar cuando el usuario cierre el diálogo de impresión
-  window.addEventListener('afterprint', () => { styleEl.remove(); container.remove(); }, { once: true });
-
-  window.print(); // llamada directa desde el click → sin bloqueos
+  const w = window.open('', '_blank', 'width=850,height=1200');
+  if (!w) { toast('Activa los popups para poder imprimir', true); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  w.print();
 }
 
 /* ════════════════════════════════════════════════════
