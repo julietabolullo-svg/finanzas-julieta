@@ -3029,10 +3029,24 @@ function descargarFactura(id) {
 ${f.notas ? `<div class="notas"><span class="notas-label">Notas</span>${notasHtml}</div>` : ''}
 </body></html>`;
 
-  const win = window.open('', '_blank');
-  if (!win) { toast('Activa los popups para descargar el PDF', true); return; }
-  win.document.write(html);
-  win.document.close();
+  printViaIframe(html);
+}
+
+function printViaIframe(html) {
+  const old = document.getElementById('_printFrame');
+  if (old) old.remove();
+  const iframe = document.createElement('iframe');
+  iframe.id = '_printFrame';
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(iframe);
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+  iframe.contentWindow.focus();
+  setTimeout(() => {
+    iframe.contentWindow.print();
+    setTimeout(() => iframe.remove(), 2000);
+  }, 300);
 }
 
 /* ════════════════════════════════════════════════════
@@ -3469,13 +3483,9 @@ function descargarPresupuesto(id) {
 
 ${p.notas ? `<div class="notas"><div class="notas-label">Notas</div>${notasHtml}</div>` : ''}
 
-<script>window.onload = () => window.print();<\/script>
 </body></html>`;
 
-  const win = window.open('', '_blank');
-  if (!win) { toast('Activa los popups para descargar el PDF', true); return; }
-  win.document.write(html);
-  win.document.close();
+  printViaIframe(html);
 }
 
 function fmtN(n) {
