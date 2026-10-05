@@ -2944,19 +2944,18 @@ function descargarFactura(id) {
 <title>${f.numero}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
-  /* margin:0 quita el espacio donde Chrome imprime la URL en cabecera/pie */
+  /* @page margin:0 elimina el espacio donde Chrome imprime URL y número de página */
   @page { size: A4 portrait; margin: 0; }
-  html { background:#fff; }
+  html, body { height: auto !important; background:#fff; overflow: visible !important; }
   body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1a1a1a; font-size:13px;
-         padding: 1.5cm 1.2cm; /* margen aplicado al contenido, no a la página */
-         max-width: 21cm; /* A4 ancho exacto */
+         padding: 1.4cm 1.2cm;
   }
-  @media print { body { padding: 1.5cm 1.2cm; } }
   .no-print { position:fixed; top:12px; right:12px; background:rgba(248,248,248,.97); border:1px solid #ddd; border-radius:8px; padding:.5rem .7rem; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.12); }
   .no-print button { display:block; padding:.4rem 1.1rem; background:#E8521A; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; white-space:nowrap; }
   .no-print small { display:block; font-size:9px; color:#aaa; margin-top:.25rem; text-align:center; }
   @media print {
     .no-print { display:none !important; }
+    html, body { height: auto !important; overflow: visible !important; }
     /* Evita saltos de página involuntarios dentro de bloques compactos */
     table, .parties, .notas { page-break-inside: avoid; }
   }
