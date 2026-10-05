@@ -3035,18 +3035,18 @@ ${f.notas ? `<div class="notas"><span class="notas-label">Notas</span>${notasHtm
 function printViaIframe(html) {
   const old = document.getElementById('_printFrame');
   if (old) old.remove();
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
   const iframe = document.createElement('iframe');
   iframe.id = '_printFrame';
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;visibility:hidden';
-  document.body.appendChild(iframe);
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
-  iframe.contentWindow.focus();
-  setTimeout(() => {
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:0;opacity:0';
+  iframe.onload = function() {
+    iframe.contentWindow.focus();
     iframe.contentWindow.print();
-    setTimeout(() => iframe.remove(), 2000);
-  }, 300);
+    setTimeout(() => { iframe.remove(); URL.revokeObjectURL(url); }, 3000);
+  };
+  document.body.appendChild(iframe);
+  iframe.src = url;
 }
 
 /* ════════════════════════════════════════════════════
