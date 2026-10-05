@@ -3033,20 +3033,31 @@ ${f.notas ? `<div class="notas"><span class="notas-label">Notas</span>${notasHtm
 }
 
 function printViaIframe(html) {
-  const old = document.getElementById('_printFrame');
-  if (old) old.remove();
-  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const iframe = document.createElement('iframe');
-  iframe.id = '_printFrame';
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:0;opacity:0';
-  iframe.onload = function() {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    setTimeout(() => { iframe.remove(); URL.revokeObjectURL(url); }, 3000);
-  };
-  document.body.appendChild(iframe);
-  iframe.src = url;
+  // Parsear el HTML de la factura y extraer CSS + contenido del body
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(html, 'text/html');
+  const css    = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n')
+                   .replace(/\bbody\b/g, '#_pc'); // aplicar estilos de body a nuestro contenedor
+  const inner  = doc.body.innerHTML;
+
+  // Inyectar estilo de impresión: ocultar toda la app, mostrar solo #_pc
+  const styleEl = document.createElement('style');
+  styleEl.textContent =
+    '@media print{body>*:not(#_pc){display:none!important}#_pc{display:block!important}}\n' + css;
+
+  // Inyectar contenido de la factura
+  const container = document.createElement('div');
+  container.id = '_pc';
+  container.style.display = 'none'; // invisible en pantalla
+  container.innerHTML = inner;
+
+  document.head.appendChild(styleEl);
+  document.body.appendChild(container);
+
+  // Limpiar cuando el usuario cierre el diálogo de impresión
+  window.addEventListener('afterprint', () => { styleEl.remove(); container.remove(); }, { once: true });
+
+  window.print(); // llamada directa desde el click → sin bloqueos
 }
 
 /* ════════════════════════════════════════════════════
