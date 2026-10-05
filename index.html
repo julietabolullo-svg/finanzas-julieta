@@ -2725,8 +2725,8 @@ function handleClienteSel() {
       $('fCliDir').value = '';
     }
   }
-  // Notas según cliente (Avon sin condición 50/50)
-  if ($('fNotas')) $('fNotas').value = notasForCliente(val);
+  // Notas según cliente solo en facturas nuevas (al editar no pisamos las notas guardadas)
+  if ($('fNotas') && !$('editFacturaId').value) $('fNotas').value = notasForCliente(val);
 }
 
 $('btnAddConcepto').addEventListener('click', () => { addConceptoRow(); });
