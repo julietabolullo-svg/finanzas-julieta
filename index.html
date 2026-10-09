@@ -857,6 +857,14 @@
               <label>Cliente</label>
               <select id="movCliente"><option value="">Sin cliente</option></select>
             </div>
+            <div class="form-group">
+              <label>Imputar a proyecto (ingreso)</label>
+              <select id="movProyectoIngreso">
+                <option value="">— Sin proyecto —</option>
+                <option value="pliquia">🚀 Pliquia</option>
+                <option value="modoavion">✈️ Modo Avión</option>
+              </select>
+            </div>
           </div>
 
           <!-- Gasto -->
@@ -897,6 +905,7 @@
               <select id="movProyecto">
                 <option value="">— Sin proyecto —</option>
                 <option value="pliquia">🚀 Pliquia</option>
+                <option value="modoavion">✈️ Modo Avión</option>
               </select>
             </div>
             <!-- IGIC / IVA -->
@@ -1400,6 +1409,14 @@
         <label>Cliente</label>
         <select id="editMovCliente"><option value="">Sin cliente</option></select>
       </div>
+      <div class="form-group">
+        <label>Imputar a proyecto (ingreso)</label>
+        <select id="editMovProyectoIngreso">
+          <option value="">— Sin proyecto —</option>
+          <option value="pliquia">🚀 Pliquia</option>
+          <option value="modoavion">✈️ Modo Avión</option>
+        </select>
+      </div>
     </div>
     <div id="editGastoFields">
       <div class="form-row">
@@ -1424,6 +1441,7 @@
         <select id="editMovProyecto">
           <option value="">— Sin proyecto —</option>
           <option value="pliquia">🚀 Pliquia</option>
+          <option value="modoavion">✈️ Modo Avión</option>
         </select>
       </div>
     </div>
@@ -2023,26 +2041,34 @@ function renderMovList(movs) {
   const totBar = $('movTotals');
   if (totBar) totBar.style.display = movs.length ? 'flex' : 'none';
 
-  // Resumen costes por proyecto
+  // Resumen por proyecto (gastos e ingresos)
   const proyBox = $('movProyectosBox');
   if (proyBox) {
-    const gastos = movs.filter(m => m.tipo === 'gasto');
-    const byProj = {};
-    gastos.forEach(m => {
+    const proyNames = { pliquia: '🚀 Pliquia', modoavion: '✈️ Modo Avión' };
+    const byProjGasto = {}, byProjIngreso = {};
+    movs.forEach(m => {
       const { fiscal } = decGasto(m.descripcion);
-      if (fiscal.proj) byProj[fiscal.proj] = (byProj[fiscal.proj] || 0) + (m.importe || 0);
+      if (!fiscal.proj) return;
+      if (m.tipo === 'gasto')   byProjGasto[fiscal.proj]   = (byProjGasto[fiscal.proj]   || 0) + (m.importe || 0);
+      if (m.tipo === 'ingreso') byProjIngreso[fiscal.proj] = (byProjIngreso[fiscal.proj] || 0) + (m.importe || 0);
     });
-    const proyNames = { pliquia: '🚀 Pliquia' };
-    const entries = Object.entries(byProj);
-    if (entries.length) {
+    const allProjs = [...new Set([...Object.keys(byProjGasto), ...Object.keys(byProjIngreso)])];
+    if (allProjs.length) {
       proyBox.style.display = '';
-      proyBox.innerHTML = '<div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem">Costes por proyecto</div>' +
-        entries.map(([k, v]) =>
-          `<div style="display:flex;justify-content:space-between;align-items:center;padding:.2rem 0">
+      proyBox.innerHTML = '<div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem">Por proyecto</div>' +
+        allProjs.map(k => {
+          const g = byProjGasto[k] || 0;
+          const i = byProjIngreso[k] || 0;
+          const neto = i - g;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.2rem 0;gap:.5rem">
             <span class="fiscal-badge fb-proj" style="font-size:.72rem">${proyNames[k] || k}</span>
-            <span style="font-weight:600;color:var(--red);font-family:'DM Mono',monospace;font-size:.85rem">−${fmt(v)}</span>
-          </div>`
-        ).join('');
+            <span style="display:flex;gap:.6rem;font-family:'DM Mono',monospace;font-size:.8rem">
+              ${i ? `<span style="color:var(--green)">+${fmt(i)}</span>` : ''}
+              ${g ? `<span style="color:var(--red)">−${fmt(g)}</span>` : ''}
+              ${i && g ? `<span style="color:${neto>=0?'var(--green)':'var(--red)'};font-weight:700">${neto>=0?'+':''}${fmt(neto)}</span>` : ''}
+            </span>
+          </div>`;
+        }).join('');
     } else {
       proyBox.style.display = 'none';
     }
@@ -2102,6 +2128,7 @@ function openEditMov(id) {
     $('editMovProyecto').value = mFiscalEdit.proj || '';
   } else {
     if (m.cliente_id) $('editMovCliente').value = m.cliente_id;
+    $('editMovProyectoIngreso').value = mFiscalEdit.proj || '';
   }
 
   openM('overlayEditMov');
@@ -2112,7 +2139,8 @@ async function saveEditMov() {
   const tipo   = $('editMovTipo').value;
   // Recuperar los datos fiscales originales del movimiento en caché
   const origFiscal = decGasto(_movCache[id]?.descripcion).fiscal;
-  if (tipo !== 'ingreso') origFiscal.proj = $('editMovProyecto')?.value || '';
+  if (tipo === 'ingreso') origFiscal.proj = $('editMovProyectoIngreso')?.value || '';
+  else origFiscal.proj = $('editMovProyecto')?.value || '';
   const descLimpia = $('editMovDesc').value.trim();
   const descFinal  = encGasto(descLimpia, origFiscal);
 
@@ -2290,7 +2318,8 @@ $('movForm').addEventListener('submit', async e => {
     mov.bloque = 'empresa';
     const cId = $('movCliente').value;
     if (cId && !cId.startsWith('seed_')) mov.cliente_id = cId;
-    else if (cId) mov.descripcion = mov.descripcion; // seed client, solo nombre
+    const projIng = $('movProyectoIngreso')?.value || '';
+    if (projIng) mov.descripcion = encGasto(mov.descripcion, { t: '', igic: 0, irpf: 0, prov: '', proj: projIng });
   } else {
     mov.bloque = 'empresa'; // gastos van siempre a empresa por defecto
     // Datos fiscales: codificar en descripción
@@ -3241,7 +3270,8 @@ function getFiscalFromForm() {
 function clearGastoFiscalForm() {
   if ($('movTipoGasto'))     $('movTipoGasto').value = '';
   if ($('movProveedor'))     $('movProveedor').value = '';
-  if ($('movProyecto'))      $('movProyecto').value = '';
+  if ($('movProyecto'))         $('movProyecto').value = '';
+  if ($('movProyectoIngreso')) $('movProyectoIngreso').value = '';
   if ($('movIgicSel'))       $('movIgicSel').value = '0';
   if ($('movIgicAmtGroup'))  $('movIgicAmtGroup').style.display = 'none';
   if ($('movIgicAmt'))       $('movIgicAmt').value = '';
